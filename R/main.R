@@ -15,9 +15,10 @@
 #' @param useRec Whether or not to use results from previous recombination analysis
 #' @param minbralen Minimum branch length of the phylogenetic tree (in number of substitutions)
 #' @param showProgress Whether or not to show a progress bar
+#' @param tuning Whether or not to use tuning
 #' @return Dating results
 #' @export
-bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, updateMu = T, updateAlpha = T, updateSigma = T, updateRoot = T, nbIts = 10000, thin=ceiling(nbIts/1000), useCoalPrior = T,  model = 'arc', useRec = F, minbralen = 0.1, showProgress = F)
+bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, updateMu = T, updateAlpha = T, updateSigma = T, updateRoot = T, nbIts = 10000, thin=ceiling(nbIts/1000), useCoalPrior = T,  model = 'arc', useRec = F, minbralen = 0.1, showProgress = F, tuning = T)
 {
   if (sum(tree$edge.length)<5) warning('Warning: input tree has small branch lengths. Make sure branch lengths are in number of substitutions (NOT per site).\n')
   #Rerranging of dates, if needed
@@ -115,6 +116,13 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
   alpha=initAlpha
   initHeight=max(tab[,3])-min(tab[,3])
 
+  #Proposal distributions and tuning
+  sdMu=0.1*ifelse(initMu==0,1e-3,initMu)
+  sdSigma=0.1*ifelse(initSigma==0,1e-3,initSigma)
+  sdDates=0.05*ifelse(initHeight==0,1,initHeight)
+  acceptance_target=0.234
+  delta=1/acceptance_target/(1-acceptance_target)
+
   #Start of MCMC algorithm
   l = likelihood(tab, mu, sigma)
   orderednodedates=sort(tab[(n+1):nrow(tab),3],method='quick',decreasing = T)
@@ -146,16 +154,20 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
 
     if (updateMu == T) {
       #MH move using Gamma(1e-3,1e3) prior
-      mu2=abs(rnorm(1,mu,0.1*ifelse(initMu==0,1e-3,initMu)))
+      mu2=abs(rnorm(1,mu,sdMu))
       l2=likelihood(tab,mu2,sigma)
-      if (log(runif(1))<l2-l+dgamma(mu2,shape=1e-3,scale=1e3,log=T)-dgamma(mu,shape=1e-3,scale=1e3,log=T)) {l=l2;mu=mu2}
+      mh=l2-l+dgamma(mu2,shape=1e-3,scale=1e3,log=T)-dgamma(mu,shape=1e-3,scale=1e3,log=T)
+      if (log(runif(1))<mh) {l=l2;mu=mu2}
+      if (tuning) sdMu=sdMu*exp(delta/(i+1)*(min(1,exp(mh))-acceptance_target))
     }
 
     if (updateSigma == T && sigma>0) {
       #MH move using Gamma(1e-3,1e3) prior
-      sigma2=abs(rnorm(1,sigma,0.1*ifelse(initSigma==0,1e-3,initSigma)))
+      sigma2=abs(rnorm(1,sigma,sdSigma))
       l2=likelihood(tab,mu,sigma2)
-      if (log(runif(1))<l2-l+dgamma(sigma2,shape=1e-3,scale=1e3,log=T)-dgamma(sigma,shape=1e-3,scale=1e3,log=T)) {l=l2;sigma=sigma2}
+      mh=l2-l+dgamma(sigma2,shape=1e-3,scale=1e3,log=T)-dgamma(sigma,shape=1e-3,scale=1e3,log=T)
+      if (log(runif(1))<mh) {l=l2;sigma=sigma2}
+      if (tuning) sdSigma=sdSigma*exp(delta/(i+1)*(min(1,exp(mh))-acceptance_target))
     }
 
     if (model == 'mixedgamma' || model == 'mixedcarc') {
@@ -184,26 +196,28 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
     }
 
     #MH to update internal dates
-    rn=rnorm(nrow(tab)-n,0,ifelse(initHeight==0,1,initHeight)*0.05)
+    rn=rnorm(nrow(tab)-n,0,sdDates)
     for (j in c((n + 1):nrow(tab))) {
       r=rn[j-n]
       old=tab[j,3]
       new=old+r
-      if (r<0&&(!is.na(tab[j,4])&&new<tab[tab[j,4],3])) next#can't be older than father
-      if (r>0&&new>min(tab[children[[j]],3])) next#can't be younger than sons
+      if (r<0&&(!is.na(tab[j,4])&&new<tab[tab[j,4],3])) {mh=-Inf} else#can't be older than father
+      if (r>0&&new>min(tab[children[[j]],3])) {mh=-Inf} else {#can't be younger than sons
       if (j>(n+1)) {mintab=rbind(tab[children[[j]],],tab[tab[j,4],],tab[j,]);mintab[,4]=c(4,4,NA,3)}
       else {mintab=rbind(tab[children[[j]],],tab[j,]);mintab[,4]=c(3,3,NA)}
       mintab[3,2]=minbralen
       l2=l-likelihood(mintab,mu,sigma)
       mintab[nrow(mintab),3]=new
       l2=l2+likelihood(mintab,mu,sigma)
-      #tab2=tab;tab2[j,3]=new;l2full=likelihood(tab2,mu,sigma);if (abs(l2-l2full)>1e-10) print(sprintf('error %f %f',l2,l2full))
       changeinorderedvec(orderednodedates,old,new)
       p2 = prior(orderedleafdates, orderednodedates, alpha)
-      if (log(runif(1)) < l2 - l + p2 - p)
+      mh = l2 - l + p2 - p
+      if (log(runif(1)) < mh)
       {l = l2; p = p2;tab[j,3]=new}
       else
         changeinorderedvec(orderednodedates,new,old)
+      }
+      if (tuning) sdDates=sdDates*exp(delta/(i+1)*(min(1,exp(mh))-acceptance_target))
     }
 
     #MH to update missing leaf dates

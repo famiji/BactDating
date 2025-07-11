@@ -20,7 +20,8 @@ bactdate(
   model = "arc",
   useRec = F,
   minbralen = 0.1,
-  showProgress = F
+  showProgress = F,
+  tuning = T
 )
 }
 \arguments{
@@ -55,6 +56,8 @@ bactdate(
 \item{minbralen}{Minimum branch length of the phylogenetic tree (in number of substitutions)}
 
 \item{showProgress}{Whether or not to show a progress bar}
+
+\item{tuning}{Whether or not to use tuning}
 }
 \value{
 Dating results
