@@ -217,7 +217,10 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
       else
         changeinorderedvec(orderednodedates,new,old)
       }
-      if (tuning) sdDates=sdDates*exp(delta/(i+1)*(min(1,exp(mh))-acceptance_target))
+      if (tuning) {
+        ii=(i-1)*(nrow(tab)-n)+j
+        sdDates=sdDates*exp(delta/(ii+1)*(min(1,exp(mh))-acceptance_target))
+      }
     }
 
     #MH to update missing leaf dates
@@ -232,7 +235,6 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
       l2=l-likelihood(mintab,mu,sigma)
       mintab[1,3]=new
       l2=l2+likelihood(mintab,mu,sigma)
-      #tab2=tab;tab2[j,3]=new;l2full=likelihood(tab2,mu,sigma);if (abs(l2-l2full)>1e-10) print(sprintf('error %f %f',l2,l2full))
       changeinorderedvec(orderedleafdates,old,new)
       p2 = prior(orderedleafdates, orderednodedates, alpha)
       if (log(runif(1)) < l2 - l + p2 - p)
