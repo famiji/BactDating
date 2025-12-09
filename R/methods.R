@@ -204,7 +204,7 @@ as.treedata.resBactDating <- function(x) {
 #' @param collapse.singles a logical specifying whether to delete the internal nodes of degree 2.
 #' @param interactive if \code{TRUE} the user is asked to select the tips or the node by clicking on the tree which must be plotted.
 #' @return tree with rec data
-#' @export
+#' @export drop.tip.useRec
 drop.tip.useRec = function (phy, tip, trim.internal = TRUE, subtree = FALSE, root.edge = 0,
           rooted = is.rooted(phy), collapse.singles = TRUE, interactive = FALSE)
 {
@@ -357,7 +357,7 @@ drop.tip.useRec = function (phy, tip, trim.internal = TRUE, subtree = FALSE, roo
 }
 
 #' Modified collapse.singles() from package ape which deletes the single nodes (i.e., with a single
-#' descendant) in a tree, respecting the rec function. Internal, used by drop.tip.rec
+#' descendant) in a tree, respecting the rec function. Internal, used by drop.tip.useRec
 #' @param tree an object of class \code{"phylo"}.
 #' @param root.edge whether to get the singleton edges from the root until the first bifurcating node and put them as \code{root.edge} of the returned tree. By default, this is ignored or if the tree has no edge lengths.
 #' @return tree with rec data
