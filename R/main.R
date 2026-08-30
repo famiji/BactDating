@@ -17,9 +17,10 @@
 #' @param showProgress Whether or not to show a progress bar
 #' @param tuning Whether or not to use tuning
 #' @param fast Whether or not to use the optimized implementation (C++ node-date sweep, incremental coalescent prior, localized root moves; statistically identical to the default loop)
+#' @param exact Only used when fast=TRUE: force the optimized implementation to stay bit-identical to the default loop, at the cost of the incremental prior and localized root moves (slower than fast=TRUE,exact=FALSE but still faster than fast=FALSE)
 #' @return Dating results
 #' @export
-bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, updateMu = T, updateAlpha = T, updateSigma = T, updateRoot = T, nbIts = 10000, thin=ceiling(nbIts/1000), useCoalPrior = T,  model = 'arc', useRec = F, minbralen = 0.1, showProgress = F, tuning = T, fast = T)
+bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, updateMu = T, updateAlpha = T, updateSigma = T, updateRoot = T, nbIts = 10000, thin=ceiling(nbIts/1000), useCoalPrior = T,  model = 'arc', useRec = F, minbralen = 0.1, showProgress = F, tuning = T, fast = T, exact = F)
 {
   if (sum(tree$edge.length)<5) warning('Warning: input tree has small branch lengths. Make sure branch lengths are in number of substitutions (NOT per site).\n')
   #Rerranging of dates, if needed
@@ -216,7 +217,7 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
     #MH to update internal dates
     rn=rnorm(nrow(tab)-n,0,sdDates)
     if (fast && modelcode>0) {
-      upd=nodeDatesUpdateC(tab,n,orderedleafdates,orderednodedates,rn,mu,sigma,l,p,alpha,minbralen,sdDates,i,tuning,useCoalPrior,modelcode,useRec)
+      upd=nodeDatesUpdateC(tab,n,orderedleafdates,orderednodedates,rn,mu,sigma,l,p,alpha,minbralen,sdDates,i,tuning,useCoalPrior,modelcode,useRec,!exact)
       l=upd$l;p=upd$p;sdDates=upd$sdDates
     } else for (j in c((n + 1):nrow(tab))) {
       r=rn[j-n]
@@ -266,7 +267,7 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
 
     if (updateRoot == T || updateRoot == 'branch') {
       #Move root on current branch
-      if (fast && modelcode>0) {
+      if (fast && modelcode>0 && !exact) {
         #The root is always node n+1; only the two side branches' substitution
         #counts change, so only their two likelihood terms need updating
         sides=children[[n+1]]
@@ -289,7 +290,7 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
 
     if (updateRoot == T) {
       #Move root branch
-      if (fast && modelcode>0) {
+      if (fast && modelcode>0 && !exact) {
         #Only the terms of nodes a, left and right are affected by this move
         sides=children[[n+1]]
         if (tab[sides[1],3]<tab[sides[2],3]) {left=sides[1];right=sides[2]} else {left=sides[2];right=sides[1]}

@@ -13,8 +13,8 @@ coalDeltaC <- function(leaves, nodes, alpha, oldval, newval) {
     .Call('_BactDating_coalDeltaC', PACKAGE = 'BactDating', leaves, nodes, alpha, oldval, newval)
 }
 
-nodeDatesUpdateC <- function(tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec) {
-    .Call('_BactDating_nodeDatesUpdateC', PACKAGE = 'BactDating', tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec)
+nodeDatesUpdateC <- function(tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec, incrementalPrior) {
+    .Call('_BactDating_nodeDatesUpdateC', PACKAGE = 'BactDating', tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec, incrementalPrior)
 }
 
 coalpriorC <- function(leaves, nodes, alpha) {

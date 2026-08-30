@@ -56,6 +56,50 @@ test_that("fast=TRUE trajectories match fast=FALSE to floating-point precision",
   expect_true(run_pair("arc", 100, 4000, 14))
 })
 
+test_that("fast=TRUE,exact=TRUE is bit-identical to the original fast=FALSE", {
+  # exact=TRUE gives up the incremental prior and the localized root moves in
+  # exchange for bit-identical trajectories: identical() must hold.
+  run_pair <- function(model, ntips, nbIts, seed, simmodel = model, ...) {
+    set.seed(seed)
+    tree <- simcoaltree(dates = 1990:(1990 + ntips - 1))
+    obsphy <- simobsphy(tree, mu = 10, sigma = 10, model = simmodel)
+    date <- 1990:(1990 + ntips - 1)
+    set.seed(seed + 999)
+    slow <- bactdate(obsphy, date, nbIts = nbIts, model = model, fast = FALSE, ...)
+    set.seed(seed + 999)
+    fast <- bactdate(obsphy, date, nbIts = nbIts, model = model, fast = TRUE, exact = TRUE, ...)
+    identical(slow$record, fast$record)
+  }
+
+  expect_true(run_pair("arc",          25, 2000, 21))
+  expect_true(run_pair("carc",         25, 2000, 22))
+  expect_true(run_pair("poisson",      25, 2000, 23))
+  expect_true(run_pair("negbin",       25, 2000, 24))
+  expect_true(run_pair("strictgamma",  25, 2000, 25))
+  expect_true(run_pair("relaxedgamma", 25, 2000, 26))
+  expect_true(run_pair("mixedgamma",   25, 2000, 27))
+  expect_true(run_pair("mixedcarc",    25, 2000, 28))
+
+  expect_true(run_pair("arc",          30, 2000, 29, updateRoot = FALSE))
+  expect_true(run_pair("arc",          30, 2000, 30, updateRoot = "branch"))
+  expect_true(run_pair("carc",         30, 2000, 31, tuning = FALSE))
+  expect_true(run_pair("arc",          30, 2000, 32, useCoalPrior = FALSE))
+
+  # Recombination-aware input (5-column tab)
+  set.seed(33)
+  tr <- simcoaltree(dates = 1990:2014)
+  op <- simobsphy(tr, mu = 10, sigma = 10, model = "arc")
+  op$unrec <- rep(0.85, length(op$edge.length))
+  set.seed(3333)
+  s1 <- bactdate(op, 1990:2014, nbIts = 1500, useRec = TRUE, fast = FALSE)
+  set.seed(3333)
+  s2 <- bactdate(op, 1990:2014, nbIts = 1500, useRec = TRUE, fast = TRUE, exact = TRUE)
+  expect_true(identical(s1$record, s2$record))
+
+  # Larger tree, longer run
+  expect_true(run_pair("arc", 100, 4000, 34))
+})
+
 test_that("fast=TRUE and fast=FALSE chains estimate the same posterior", {
   # Six independent chains per path; the between-path difference of the
   # pooled posterior means must stay within ~3 standard errors of the

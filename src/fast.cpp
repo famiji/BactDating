@@ -196,7 +196,8 @@ List nodeDatesUpdateC(NumericMatrix tab, int n,
                       NumericVector orderedleafdates, NumericVector orderednodedates,
                       NumericVector rn, double mu, double sigma, double l, double p,
                       double alpha, double minbralen, double sdDates, int outerit,
-                      bool tuning, bool useCoalPrior, int model, bool useRec) {
+                      bool tuning, bool useCoalPrior, int model, bool useRec,
+                      bool incrementalPrior) {
   int nrowtab = tab.nrow();
   int nint = nrowtab - n;               // number of internal nodes (incl root)
   double acceptance_target = 0.234;
@@ -236,9 +237,12 @@ List nodeDatesUpdateC(NumericMatrix tab, int n,
       double newlocal = localLik(tab, j1, n, children, mu, sigma, minbralen, model, useRec);
       double l2 = l - oldlocal + newlocal;
       changeinorderedvec(orderednodedates, old, nw);
-      double p2 = useCoalPrior
-        ? p + coalDeltaC(orderedleafdates, orderednodedates, alpha, old, nw)
-        : 0.0;
+      double p2;
+      if (!useCoalPrior) p2 = 0.0;
+      else if (incrementalPrior)
+        p2 = p + coalDeltaC(orderedleafdates, orderednodedates, alpha, old, nw);
+      else
+        p2 = coalpriorC(orderedleafdates, orderednodedates, alpha);
       mh = l2 - l + p2 - p;
       if (log(R::runif(0.0, 1.0)) < mh) {
         l = l2; p = p2;                 // accept: keep tab(row,2)=nw

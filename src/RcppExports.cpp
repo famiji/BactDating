@@ -55,8 +55,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // nodeDatesUpdateC
-List nodeDatesUpdateC(NumericMatrix tab, int n, NumericVector orderedleafdates, NumericVector orderednodedates, NumericVector rn, double mu, double sigma, double l, double p, double alpha, double minbralen, double sdDates, int outerit, bool tuning, bool useCoalPrior, int model, bool useRec);
-RcppExport SEXP _BactDating_nodeDatesUpdateC(SEXP tabSEXP, SEXP nSEXP, SEXP orderedleafdatesSEXP, SEXP orderednodedatesSEXP, SEXP rnSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP lSEXP, SEXP pSEXP, SEXP alphaSEXP, SEXP minbralenSEXP, SEXP sdDatesSEXP, SEXP outeritSEXP, SEXP tuningSEXP, SEXP useCoalPriorSEXP, SEXP modelSEXP, SEXP useRecSEXP) {
+List nodeDatesUpdateC(NumericMatrix tab, int n, NumericVector orderedleafdates, NumericVector orderednodedates, NumericVector rn, double mu, double sigma, double l, double p, double alpha, double minbralen, double sdDates, int outerit, bool tuning, bool useCoalPrior, int model, bool useRec, bool incrementalPrior);
+RcppExport SEXP _BactDating_nodeDatesUpdateC(SEXP tabSEXP, SEXP nSEXP, SEXP orderedleafdatesSEXP, SEXP orderednodedatesSEXP, SEXP rnSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP lSEXP, SEXP pSEXP, SEXP alphaSEXP, SEXP minbralenSEXP, SEXP sdDatesSEXP, SEXP outeritSEXP, SEXP tuningSEXP, SEXP useCoalPriorSEXP, SEXP modelSEXP, SEXP useRecSEXP, SEXP incrementalPriorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -77,7 +77,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type useCoalPrior(useCoalPriorSEXP);
     Rcpp::traits::input_parameter< int >::type model(modelSEXP);
     Rcpp::traits::input_parameter< bool >::type useRec(useRecSEXP);
-    rcpp_result_gen = Rcpp::wrap(nodeDatesUpdateC(tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec));
+    Rcpp::traits::input_parameter< bool >::type incrementalPrior(incrementalPriorSEXP);
+    rcpp_result_gen = Rcpp::wrap(nodeDatesUpdateC(tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec, incrementalPrior));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -187,7 +188,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_BactDating_localTermsC", (DL_FUNC) &_BactDating_localTermsC, 7},
     {"_BactDating_coalAlphaSumC", (DL_FUNC) &_BactDating_coalAlphaSumC, 2},
     {"_BactDating_coalDeltaC", (DL_FUNC) &_BactDating_coalDeltaC, 5},
-    {"_BactDating_nodeDatesUpdateC", (DL_FUNC) &_BactDating_nodeDatesUpdateC, 17},
+    {"_BactDating_nodeDatesUpdateC", (DL_FUNC) &_BactDating_nodeDatesUpdateC, 18},
     {"_BactDating_coalpriorC", (DL_FUNC) &_BactDating_coalpriorC, 3},
     {"_BactDating_likelihoodGammaC", (DL_FUNC) &_BactDating_likelihoodGammaC, 2},
     {"_BactDating_likelihoodRelaxedgammaC", (DL_FUNC) &_BactDating_likelihoodRelaxedgammaC, 3},
