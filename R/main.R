@@ -147,10 +147,7 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
   if (showProgress) pb <- utils::txtProgressBar(min=0,max=nbIts,style = 3)
   children=vector("list", max(tab[,4],na.rm = T))
   for (i in 1:nrow(tab)) if (!is.na(tab[i,4])) children[[tab[i,4]]]=c(children[[tab[i,4]]],i)
-  curroot=NA
-  rootchildren=which(tab[,4]==(n+1))
-  for (j in 1:nrow(tree$edge)) if (setequal(rootchildren,tree$edge[j,])) {curroot=j;break}
-  if (is.na(curroot)) curroot=min(which(tree$edge[,1]==(n+1)))
+  curroot=findCurrootC(tree$edge,children[[n+1]],n+1)
 
   for (i in 1:nbIts) {
     #Record
@@ -277,6 +274,15 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
         tab[sides,2]=c(sum(old)*r,sum(old)*(1-r))
         l2=l-oldlocal+localTermsC(tab,sides,mu,sigma,minbralen,modelcode,useRec)
         if (log(runif(1))<l2-l) l=l2 else tab[sides,2]=old
+      } else if (fast && modelcode>0) {
+        #exact mode: full likelihood recompute (bit-identical), but the root
+        #is always node n+1 so which() is avoided
+        sides=children[[n+1]]
+        old=tab[sides,2]
+        r=runif(1)
+        tab[sides,2]=c(sum(old)*r,sum(old)*(1-r))
+        l2=likelihood(tab,mu, sigma)
+        if (log(runif(1))<l2-l) l=l2 else tab[sides,2]=old
       } else {
         root=which(is.na(tab[,4]))
         sides=which(tab[,4]==root)
@@ -314,16 +320,37 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
             {l=l2
             children=vector("list", max(tab[,4],na.rm = T))
             for (i in 1:nrow(tab)) if (!is.na(tab[i,4])) children[[tab[i,4]]]=c(children[[tab[i,4]]],i)
-            curroot=NA
-            rootchildren=children[[n+1]]
-            for (j in 1:nrow(tree$edge)) if (setequal(rootchildren,tree$edge[j,])) {curroot=j;break}
-            if (is.na(curroot)) curroot=min(which(tree$edge[,1]==(n+1)))
+            curroot=findCurrootC(tree$edge,children[[n+1]],n+1)
           } else {
             tab[a,4]=olda4;tab[right,4]=oldright4
             tab[a,2]=olda2;tab[left,2]=oldleft2;tab[right,2]=oldright2
             if (useRec) tab[left,5]=oldleft5
           }
         }
+      } else if (fast && modelcode>0) {
+      #Move root branch (exact mode): full likelihood recompute (bit-identical),
+      #but which() scans are replaced by the children structure
+      sides=children[[n+1]]
+      if (tab[sides[1],3]<tab[sides[2],3]) {left=sides[1];right=sides[2]} else {left=sides[2];right=sides[1]}
+      if (left>n) {
+        oldtab=tab
+        ab=children[[left]]
+        if (runif(1)<0.5) {a=ab[1];b=ab[2]} else {a=ab[2];b=ab[1]}
+        tab[a,4]=n+1
+        tab[right,4]=left
+        r=runif(1)
+        tab[a,2]=oldtab[a,2]*r
+        tab[left,2]=oldtab[a,2]*(1-r)
+        tab[right,2]=oldtab[right,2]+oldtab[left,2]
+        if (useRec) tab[left,5]=tab[a,5]
+        l2=likelihood(tab,mu,sigma)
+        if (log(runif(1))<l2-l+log(ifelse(oldtab[a,2]==0,1,oldtab[a,2])/ifelse(tab[right,2]==0,1,tab[right,2])))
+          {l=l2
+          children=vector("list", max(tab[,4],na.rm = T))
+          for (i in 1:nrow(tab)) if (!is.na(tab[i,4])) children[[tab[i,4]]]=c(children[[tab[i,4]]],i)
+          curroot=findCurrootC(tree$edge,children[[n+1]],n+1)
+        } else tab=oldtab
+      }
       } else {
       #Move root branch
       root=which(is.na(tab[,4]))
@@ -345,10 +372,7 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
           {l=l2
           children=vector("list", max(tab[,4],na.rm = T))
           for (i in 1:nrow(tab)) if (!is.na(tab[i,4])) children[[tab[i,4]]]=c(children[[tab[i,4]]],i)
-          curroot=NA
-          rootchildren=which(tab[,4]==(n+1))
-          for (j in 1:nrow(tree$edge)) if (setequal(rootchildren,tree$edge[j,])) {curroot=j;break}
-          if (is.na(curroot)) curroot=min(which(tree$edge[,1]==(n+1)))
+          curroot=findCurrootC(tree$edge,children[[n+1]],n+1)
         } else tab=oldtab
       }
       }

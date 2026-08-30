@@ -124,6 +124,25 @@ static int countGt(const NumericVector& v, double val) {
 }
 
 // ---------------------------------------------------------------------------
+// Fast equivalent of main.R's curroot search:
+//   for (j in 1:nrow(tree$edge)) if (setequal(rootchildren,tree$edge[j,])) ...
+//   if (is.na(curroot)) curroot=min(which(tree$edge[,1]==(n+1)))
+// Returns the same 1-based edge index, without the per-edge setequal/sort
+// overhead. rootchildren holds the two children of the global root n+1.
+// ---------------------------------------------------------------------------
+// [[Rcpp::export]]
+int findCurrootC(NumericMatrix edge, NumericVector rootchildren, int rootnode) {
+  double r1 = rootchildren[0], r2 = rootchildren[1];
+  for (int j = 0; j < edge.nrow(); ++j) {
+    double e1 = edge(j, 0), e2 = edge(j, 1);
+    if ((e1 == r1 && e2 == r2) || (e1 == r2 && e2 == r1)) return j + 1;
+  }
+  for (int j = 0; j < edge.nrow(); ++j)
+    if (edge(j, 0) == (double)rootnode) return j + 1;
+  return NA_INTEGER;
+}
+
+// ---------------------------------------------------------------------------
 // Sort-free equivalent of the sum-of-sorted-differences statistic used by the
 // alpha Gibbs move in main.R:
 //   su = sum(k*(k-1)*difs) over the merged decreasing sequence of leaf and

@@ -5,6 +5,10 @@ localTermsC <- function(tab, nodes1, mu, sigma, minbralen, model, useRec) {
     .Call('_BactDating_localTermsC', PACKAGE = 'BactDating', tab, nodes1, mu, sigma, minbralen, model, useRec)
 }
 
+findCurrootC <- function(edge, rootchildren, rootnode) {
+    .Call('_BactDating_findCurrootC', PACKAGE = 'BactDating', edge, rootchildren, rootnode)
+}
+
 coalAlphaSumC <- function(leaves, nodes) {
     .Call('_BactDating_coalAlphaSumC', PACKAGE = 'BactDating', leaves, nodes)
 }

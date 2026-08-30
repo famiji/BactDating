@@ -27,6 +27,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// findCurrootC
+int findCurrootC(NumericMatrix edge, NumericVector rootchildren, int rootnode);
+RcppExport SEXP _BactDating_findCurrootC(SEXP edgeSEXP, SEXP rootchildrenSEXP, SEXP rootnodeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type edge(edgeSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rootchildren(rootchildrenSEXP);
+    Rcpp::traits::input_parameter< int >::type rootnode(rootnodeSEXP);
+    rcpp_result_gen = Rcpp::wrap(findCurrootC(edge, rootchildren, rootnode));
+    return rcpp_result_gen;
+END_RCPP
+}
 // coalAlphaSumC
 double coalAlphaSumC(NumericVector leaves, NumericVector nodes);
 RcppExport SEXP _BactDating_coalAlphaSumC(SEXP leavesSEXP, SEXP nodesSEXP) {
@@ -186,6 +199,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_BactDating_localTermsC", (DL_FUNC) &_BactDating_localTermsC, 7},
+    {"_BactDating_findCurrootC", (DL_FUNC) &_BactDating_findCurrootC, 3},
     {"_BactDating_coalAlphaSumC", (DL_FUNC) &_BactDating_coalAlphaSumC, 2},
     {"_BactDating_coalDeltaC", (DL_FUNC) &_BactDating_coalDeltaC, 5},
     {"_BactDating_nodeDatesUpdateC", (DL_FUNC) &_BactDating_nodeDatesUpdateC, 18},
