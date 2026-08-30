@@ -95,8 +95,14 @@ double likelihoodNegbinC(NumericMatrix tab, double mu, double sigma) {
 // [[Rcpp::export]]
 void changeinorderedvec(NumericVector vec,double old,double n) {
   //NumericVector res = clone(vec);
-  int i=0;
-  while (vec(i)!=old) i++;
+  //Binary search for the first occurrence of old (the vector is sorted in
+  //decreasing order): same index as the original linear scan, but O(log n).
+  int lo=0, hi=vec.length();
+  while (lo<hi) {
+    int mid=(lo+hi)/2;
+    if (vec[mid]>old) lo=mid+1; else hi=mid;
+  }
+  int i=lo;
   vec(i)=n;
   while (1) {
     if (i>0               &&vec(i-1)<vec(i)) {vec(i)=vec(i-1);vec(i-1)=n;i--;continue;}

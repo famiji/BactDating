@@ -113,6 +113,16 @@ static int countGe(const NumericVector& v, double val) {
   return lo;
 }
 
+// Number of elements > val in a vector sorted in decreasing order.
+static int countGt(const NumericVector& v, double val) {
+  int lo = 0, hi = v.size();
+  while (lo < hi) {
+    int mid = (lo + hi) / 2;
+    if (v[mid] > val) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
 // ---------------------------------------------------------------------------
 // Sort-free equivalent of the sum-of-sorted-differences statistic used by the
 // alpha Gibbs move in main.R:
@@ -190,6 +200,16 @@ double coalDeltaC(NumericVector leaves, NumericVector nodes, double alpha,
 // l, p and sdDates. RNG consumption matches the original R loop exactly:
 // the per-node proposals rn are drawn in R beforehand, and one uniform is drawn
 // (via R::runif) per node that passes the boundary checks, in the same order.
+//
+// When incrementalPrior is false the coalescent prior is still evaluated
+// bit-identically to coalpriorC, but via a prefix-sum cache: coalpriorC is a
+// single sequential accumulation from the newest event to the oldest, and a
+// proposal only relocates one node event, so every event strictly newer than
+// max(old,new) yields the same partial sum as a full recomputation. The sweep
+// caches those partial sums and only walks the tail (events at or older than
+// max(old,new)) for each proposal - the same operations, in the same order,
+// as coalpriorC on the proposed arrays, hence bit-identical results at a
+// fraction of the cost.
 // ---------------------------------------------------------------------------
 // [[Rcpp::export]]
 List nodeDatesUpdateC(NumericMatrix tab, int n,
@@ -209,6 +229,38 @@ List nodeDatesUpdateC(NumericMatrix tab, int n,
     double f = tab(x - 1, 3);
     if (!NumericVector::is_na(f))
       children[(int)f].push_back(x);
+  }
+
+  // Prefix-sum cache for the exact (bit-identical) prior evaluation.
+  // Walk state after t merge steps: leaves/nodes consumed (I1s/I2s), last
+  // event value (PrevS) and accumulated p (Ssum), matching coalpriorC's
+  // arithmetic step for step. Valid for the current state up to step X.
+  const double* LV = orderedleafdates.begin();
+  const double* ND = orderednodedates.begin();
+  int ne = orderedleafdates.size();
+  int msteps = 2 * ne - 2;             // merge steps after the initial leaf
+  std::vector<double> Ssum, PrevS;
+  std::vector<int> I1s, I2s;
+  int X = 0;
+  bool exactPrior = useCoalPrior && !incrementalPrior;
+  if (exactPrior) {
+    Ssum.resize(msteps + 1); PrevS.resize(msteps + 1);
+    I1s.resize(msteps + 1); I2s.resize(msteps + 1);
+    double pp = -log(alpha) * (ne - 1);
+    int i1 = 1, i2 = 0; double prev = LV[0];
+    Ssum[0] = pp; I1s[0] = 1; I2s[0] = 0; PrevS[0] = prev;
+    for (int t = 1; t <= msteps; ++t) {
+      int k = i1 - i2;
+      if (i1 < ne && LV[i1] > ND[i2]) {
+        pp = pp - (k * (k - 1.0) / (2.0 * alpha) * (prev - LV[i1]));
+        prev = LV[i1++];
+      } else {
+        pp = pp - (k * (k - 1.0) / (2.0 * alpha) * (prev - ND[i2]));
+        prev = ND[i2++];
+      }
+      Ssum[t] = pp; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev;
+    }
+    X = msteps;
   }
 
   for (int j1 = n + 1; j1 <= nrowtab; ++j1) {
@@ -238,17 +290,59 @@ List nodeDatesUpdateC(NumericMatrix tab, int n,
       double l2 = l - oldlocal + newlocal;
       changeinorderedvec(orderednodedates, old, nw);
       double p2;
-      if (!useCoalPrior) p2 = 0.0;
-      else if (incrementalPrior)
+      int pos_hi = 0;                  // merge steps consuming events > max(old,nw)
+      if (!useCoalPrior) {
+        p2 = 0.0;
+      } else if (incrementalPrior) {
         p2 = p + coalDeltaC(orderedleafdates, orderednodedates, alpha, old, nw);
-      else
-        p2 = coalpriorC(orderedleafdates, orderednodedates, alpha);
+      } else {
+        // Events strictly newer than hi are identical in the current and
+        // proposed states, so the cached partial sum at that point is exact
+        // for both; the first leaf (newest event) is consumed before step 1.
+        double hi = nw > old ? nw : old;
+        pos_hi = countGt(orderedleafdates, hi) + countGt(orderednodedates, hi);
+        if (pos_hi > 0) pos_hi--;
+        if (pos_hi > X) {
+          // Extend the cache over events > hi (identical in both states).
+          double pp = Ssum[X];
+          int i1 = I1s[X], i2 = I2s[X]; double prev = PrevS[X];
+          for (int t = X + 1; t <= pos_hi; ++t) {
+            int k = i1 - i2;
+            if (i1 < ne && LV[i1] > ND[i2]) {
+              pp = pp - (k * (k - 1.0) / (2.0 * alpha) * (prev - LV[i1]));
+              prev = LV[i1++];
+            } else {
+              pp = pp - (k * (k - 1.0) / (2.0 * alpha) * (prev - ND[i2]));
+              prev = ND[i2++];
+            }
+            Ssum[t] = pp; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev;
+          }
+          X = pos_hi;
+        }
+        // Walk the tail over the proposed arrays: the same operations, in
+        // the same order, as coalpriorC from that point on.
+        p2 = Ssum[pos_hi];
+        int i1 = I1s[pos_hi], i2 = I2s[pos_hi]; double prev = PrevS[pos_hi];
+        for (int t = pos_hi + 1; t <= msteps; ++t) {
+          int k = i1 - i2;
+          if (i1 < ne && LV[i1] > ND[i2]) {
+            p2 = p2 - (k * (k - 1.0) / (2.0 * alpha) * (prev - LV[i1]));
+            prev = LV[i1++];
+          } else {
+            p2 = p2 - (k * (k - 1.0) / (2.0 * alpha) * (prev - ND[i2]));
+            prev = ND[i2++];
+          }
+          Ssum[t] = p2; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev;
+        }
+      }
       mh = l2 - l + p2 - p;
       if (log(R::runif(0.0, 1.0)) < mh) {
         l = l2; p = p2;                 // accept: keep tab(row,2)=nw
+        if (exactPrior) X = msteps;     // tail sums now describe the new state
       } else {
         changeinorderedvec(orderednodedates, nw, old);
         tab(row, 2) = old;              // reject: revert date
+        if (exactPrior) X = pos_hi;     // cache valid only up to the prefix
       }
     }
 
