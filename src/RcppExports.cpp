@@ -10,6 +10,33 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// nodeDatesUpdateC
+List nodeDatesUpdateC(NumericMatrix tab, int n, NumericVector orderedleafdates, NumericVector orderednodedates, NumericVector rn, double mu, double sigma, double l, double p, double alpha, double minbralen, double sdDates, int outerit, bool tuning, bool useCoalPrior, int model, bool useRec);
+RcppExport SEXP _BactDating_nodeDatesUpdateC(SEXP tabSEXP, SEXP nSEXP, SEXP orderedleafdatesSEXP, SEXP orderednodedatesSEXP, SEXP rnSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP lSEXP, SEXP pSEXP, SEXP alphaSEXP, SEXP minbralenSEXP, SEXP sdDatesSEXP, SEXP outeritSEXP, SEXP tuningSEXP, SEXP useCoalPriorSEXP, SEXP modelSEXP, SEXP useRecSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type orderedleafdates(orderedleafdatesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type orderednodedates(orderednodedatesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rn(rnSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< double >::type l(lSEXP);
+    Rcpp::traits::input_parameter< double >::type p(pSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< double >::type minbralen(minbralenSEXP);
+    Rcpp::traits::input_parameter< double >::type sdDates(sdDatesSEXP);
+    Rcpp::traits::input_parameter< int >::type outerit(outeritSEXP);
+    Rcpp::traits::input_parameter< bool >::type tuning(tuningSEXP);
+    Rcpp::traits::input_parameter< bool >::type useCoalPrior(useCoalPriorSEXP);
+    Rcpp::traits::input_parameter< int >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< bool >::type useRec(useRecSEXP);
+    rcpp_result_gen = Rcpp::wrap(nodeDatesUpdateC(tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec));
+    return rcpp_result_gen;
+END_RCPP
+}
 // coalpriorC
 double coalpriorC(NumericVector leaves, NumericVector nodes, double alpha);
 RcppExport SEXP _BactDating_coalpriorC(SEXP leavesSEXP, SEXP nodesSEXP, SEXP alphaSEXP) {
@@ -113,6 +140,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_BactDating_nodeDatesUpdateC", (DL_FUNC) &_BactDating_nodeDatesUpdateC, 17},
     {"_BactDating_coalpriorC", (DL_FUNC) &_BactDating_coalpriorC, 3},
     {"_BactDating_likelihoodGammaC", (DL_FUNC) &_BactDating_likelihoodGammaC, 2},
     {"_BactDating_likelihoodRelaxedgammaC", (DL_FUNC) &_BactDating_likelihoodRelaxedgammaC, 3},

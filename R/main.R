@@ -16,9 +16,10 @@
 #' @param minbralen Minimum branch length of the phylogenetic tree (in number of substitutions)
 #' @param showProgress Whether or not to show a progress bar
 #' @param tuning Whether or not to use tuning
+#' @param fast Whether or not to use the optimized C++ update for internal node dates (statistically identical to the default loop)
 #' @return Dating results
 #' @export
-bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, updateMu = T, updateAlpha = T, updateSigma = T, updateRoot = T, nbIts = 10000, thin=ceiling(nbIts/1000), useCoalPrior = T,  model = 'arc', useRec = F, minbralen = 0.1, showProgress = F, tuning = T)
+bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, updateMu = T, updateAlpha = T, updateSigma = T, updateRoot = T, nbIts = 10000, thin=ceiling(nbIts/1000), useCoalPrior = T,  model = 'arc', useRec = F, minbralen = 0.1, showProgress = F, tuning = T, fast = T)
 {
   if (sum(tree$edge.length)<5) warning('Warning: input tree has small branch lengths. Make sure branch lengths are in number of substitutions (NOT per site).\n')
   #Rerranging of dates, if needed
@@ -67,6 +68,15 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
   if (model == 'carcR') likelihood=function(tab,mu,sigma) return(likelihoodCarc(tab,mu,sigma))
   if (model == 'null') {updateMu=0;likelihood=function(tab,mu,sigma) return(0)}
   if (!exists('likelihood')) stop('Unknown model.')
+
+  #Map model to an integer code for the optimized C++ internal-date update
+  modelcode=0
+  if (model=='poisson') modelcode=1
+  if (model=='negbin') modelcode=2
+  if (model=='strictgamma') modelcode=3
+  if (model=='relaxedgamma'||model=='mixedgamma') modelcode=4
+  if (model=='arc') modelcode=5
+  if (model=='carc'||model=='mixedcarc') modelcode=6
 
   #Deal with missing dates
   rangedate[which(is.na(rangedate[,1])),1]=min(rangedate[,1],na.rm = T)
@@ -197,7 +207,10 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
 
     #MH to update internal dates
     rn=rnorm(nrow(tab)-n,0,sdDates)
-    for (j in c((n + 1):nrow(tab))) {
+    if (fast && modelcode>0) {
+      upd=nodeDatesUpdateC(tab,n,orderedleafdates,orderednodedates,rn,mu,sigma,l,p,alpha,minbralen,sdDates,i,tuning,useCoalPrior,modelcode,useRec)
+      l=upd$l;p=upd$p;sdDates=upd$sdDates
+    } else for (j in c((n + 1):nrow(tab))) {
       r=rn[j-n]
       old=tab[j,3]
       new=old+r
