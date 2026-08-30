@@ -16,7 +16,7 @@
 #' @param minbralen Minimum branch length of the phylogenetic tree (in number of substitutions)
 #' @param showProgress Whether or not to show a progress bar
 #' @param tuning Whether or not to use tuning
-#' @param fast Whether or not to use the optimized C++ update for internal node dates (statistically identical to the default loop)
+#' @param fast Whether or not to use the optimized implementation (C++ node-date sweep, incremental coalescent prior, localized root moves; statistically identical to the default loop)
 #' @return Dating results
 #' @export
 bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, updateMu = T, updateAlpha = T, updateSigma = T, updateRoot = T, nbIts = 10000, thin=ceiling(nbIts/1000), useCoalPrior = T,  model = 'arc', useRec = F, minbralen = 0.1, showProgress = F, tuning = T, fast = T)
@@ -117,10 +117,14 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
 
   #Sample Alpha if no initial point provided
   if (is.na(initAlpha)) {
-    s <- sort.int(tab[, 3], method='quick',decreasing = T, index.return = TRUE)
-    k=cumsum(2*(s$ix<=n)-1)
-    difs=s$x[1:(nrowtab-1)]-s$x[2:nrowtab]
-    su=sum(k[1:(nrowtab-1)]*(k[1:(nrowtab-1)]-1)*difs)
+    if (fast) {
+      su=coalAlphaSumC(tab[1:n,3],tab[(n+1):nrowtab,3])
+    } else {
+      s <- sort.int(tab[, 3], method='quick',decreasing = T, index.return = TRUE)
+      k=cumsum(2*(s$ix<=n)-1)
+      difs=s$x[1:(nrowtab-1)]-s$x[2:nrowtab]
+      su=sum(k[1:(nrowtab-1)]*(k[1:(nrowtab-1)]-1)*difs)
+    }
     initAlpha=1/rgamma(1,shape=n+0.001-1,scale=2000/(su*1000+2))
   }
   alpha=initAlpha
@@ -197,10 +201,14 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
 
     if (updateAlpha == T) {
       #Gibbs move using inverse-gamma prior
-      s <- sort.int(tab[, 3], method='quick',decreasing = T, index.return = TRUE)
-      k=cumsum(2*(s$ix<=n)-1)
-      difs=s$x[1:(nrowtab-1)]-s$x[2:nrowtab]
-      su=sum(k[1:(nrowtab-1)]*(k[1:(nrowtab-1)]-1)*difs)
+      if (fast) {
+        su=coalAlphaSumC(orderedleafdates,orderednodedates)
+      } else {
+        s <- sort.int(tab[, 3], method='quick',decreasing = T, index.return = TRUE)
+        k=cumsum(2*(s$ix<=n)-1)
+        difs=s$x[1:(nrowtab-1)]-s$x[2:nrowtab]
+        su=sum(k[1:(nrowtab-1)]*(k[1:(nrowtab-1)]-1)*difs)
+      }
       alpha=1/rgamma(1,shape=n+0.001-1,scale=2000/(su*1000+2))
       p=prior(orderedleafdates,orderednodedates,alpha)
     }
@@ -258,16 +266,64 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
 
     if (updateRoot == T || updateRoot == 'branch') {
       #Move root on current branch
-      root=which(is.na(tab[,4]))
-      sides=which(tab[,4]==root)
-      old=tab[sides,2]
-      r=runif(1)
-      tab[sides,2]=c(sum(old)*r,sum(old)*(1-r))
-      l2=likelihood(tab,mu, sigma)
-      if (log(runif(1))<l2-l) l=l2 else tab[sides,2]=old
+      if (fast && modelcode>0) {
+        #The root is always node n+1; only the two side branches' substitution
+        #counts change, so only their two likelihood terms need updating
+        sides=children[[n+1]]
+        old=tab[sides,2]
+        oldlocal=localTermsC(tab,sides,mu,sigma,minbralen,modelcode,useRec)
+        r=runif(1)
+        tab[sides,2]=c(sum(old)*r,sum(old)*(1-r))
+        l2=l-oldlocal+localTermsC(tab,sides,mu,sigma,minbralen,modelcode,useRec)
+        if (log(runif(1))<l2-l) l=l2 else tab[sides,2]=old
+      } else {
+        root=which(is.na(tab[,4]))
+        sides=which(tab[,4]==root)
+        old=tab[sides,2]
+        r=runif(1)
+        tab[sides,2]=c(sum(old)*r,sum(old)*(1-r))
+        l2=likelihood(tab,mu, sigma)
+        if (log(runif(1))<l2-l) l=l2 else tab[sides,2]=old
+      }
   }
 
     if (updateRoot == T) {
+      #Move root branch
+      if (fast && modelcode>0) {
+        #Only the terms of nodes a, left and right are affected by this move
+        sides=children[[n+1]]
+        if (tab[sides[1],3]<tab[sides[2],3]) {left=sides[1];right=sides[2]} else {left=sides[2];right=sides[1]}
+        if (left>n) {
+          ab=children[[left]]
+          if (runif(1)<0.5) {a=ab[1];b=ab[2]} else {a=ab[2];b=ab[1]}
+          aff=sort(c(a,left,right))
+          oldlocal=localTermsC(tab,aff,mu,sigma,minbralen,modelcode,useRec)
+          olda2=tab[a,2];oldleft2=tab[left,2];oldright2=tab[right,2]
+          olda4=tab[a,4];oldright4=tab[right,4]
+          if (useRec) oldleft5=tab[left,5]
+          tab[a,4]=n+1
+          tab[right,4]=left
+          r=runif(1)
+          tab[a,2]=olda2*r
+          tab[left,2]=olda2*(1-r)
+          tab[right,2]=oldright2+oldleft2
+          if (useRec) tab[left,5]=tab[a,5]
+          l2=l-oldlocal+localTermsC(tab,aff,mu,sigma,minbralen,modelcode,useRec)
+          if (log(runif(1))<l2-l+log(ifelse(olda2==0,1,olda2)/ifelse(tab[right,2]==0,1,tab[right,2])))
+            {l=l2
+            children=vector("list", max(tab[,4],na.rm = T))
+            for (i in 1:nrow(tab)) if (!is.na(tab[i,4])) children[[tab[i,4]]]=c(children[[tab[i,4]]],i)
+            curroot=NA
+            rootchildren=children[[n+1]]
+            for (j in 1:nrow(tree$edge)) if (setequal(rootchildren,tree$edge[j,])) {curroot=j;break}
+            if (is.na(curroot)) curroot=min(which(tree$edge[,1]==(n+1)))
+          } else {
+            tab[a,4]=olda4;tab[right,4]=oldright4
+            tab[a,2]=olda2;tab[left,2]=oldleft2;tab[right,2]=oldright2
+            if (useRec) tab[left,5]=oldleft5
+          }
+        }
+      } else {
       #Move root branch
       root=which(is.na(tab[,4]))
       sides=which(tab[,4]==root)
@@ -293,6 +349,7 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
           for (j in 1:nrow(tree$edge)) if (setequal(rootchildren,tree$edge[j,])) {curroot=j;break}
           if (is.na(curroot)) curroot=min(which(tree$edge[,1]==(n+1)))
         } else tab=oldtab
+      }
       }
     }
 

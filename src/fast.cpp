@@ -91,6 +91,100 @@ static double localLik(const NumericMatrix& tab, int j1, int n,
 }
 
 // ---------------------------------------------------------------------------
+// Sum of the likelihood terms of an explicit set of nodes (1-based indices),
+// in the given order. Used to localize the root-move likelihood updates.
+// ---------------------------------------------------------------------------
+// [[Rcpp::export]]
+double localTermsC(NumericMatrix tab, IntegerVector nodes1, double mu, double sigma,
+                   double minbralen, int model, bool useRec) {
+  double s = 0.0;
+  for (int i = 0; i < nodes1.size(); ++i)
+    s += termC(tab, nodes1[i] - 1, mu, sigma, minbralen, model, useRec);
+  return s;
+}
+
+// Number of elements >= val in a vector sorted in decreasing order.
+static int countGe(const NumericVector& v, double val) {
+  int lo = 0, hi = v.size();
+  while (lo < hi) {
+    int mid = (lo + hi) / 2;
+    if (v[mid] >= val) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+// ---------------------------------------------------------------------------
+// Sort-free equivalent of the sum-of-sorted-differences statistic used by the
+// alpha Gibbs move in main.R:
+//   su = sum(k*(k-1)*difs) over the merged decreasing sequence of leaf and
+//   node dates, where k is the running leaf-minus-node count.
+// Merging two already-sorted vectors reproduces the R sort-based computation
+// with identical arithmetic (tie order is immaterial: the gap between tied
+// values is zero and the count after the tied block is order-independent).
+// ---------------------------------------------------------------------------
+// [[Rcpp::export]]
+double coalAlphaSumC(NumericVector leaves, NumericVector nodes) {
+  std::vector<double> lv(leaves.begin(), leaves.end());
+  std::vector<double> nd(nodes.begin(), nodes.end());
+  std::sort(lv.begin(), lv.end(), std::greater<double>());
+  std::sort(nd.begin(), nd.end(), std::greater<double>());
+  int nl = (int)lv.size(), nn = (int)nd.size();
+  int i1 = 0, i2 = 0, k = 0;
+  double su = 0.0, prev = 0.0;
+  bool first = true;
+  while (i1 < nl || i2 < nn) {
+    double e; bool isLeaf;
+    if (i2 >= nn || (i1 < nl && lv[i1] >= nd[i2])) { e = lv[i1]; isLeaf = true; }
+    else { e = nd[i2]; isLeaf = false; }
+    if (!first) su += (double)k * (double)(k - 1) * (prev - e);
+    k += isLeaf ? 1 : -1;
+    prev = e;
+    first = false;
+    if (isLeaf) i1++; else i2++;
+  }
+  return su;
+}
+
+// ---------------------------------------------------------------------------
+// Incremental coalescent prior update.
+//
+// coalpriorC is O(n) and was called once per internal node per iteration.
+// Moving a single node date from oldval to newval only changes the lineage
+// count between the two dates, so the prior difference can be computed over
+// that interval alone:
+//
+//   With P = -log(alpha)(n-1) - S, S = sum k(k-1)/(2alpha) * dt, letting
+//   I = integral of k_new(t) over (lo, hi) in the UPDATED state
+//   (nodes already contains newval instead of oldval):
+//     newval < oldval : dP = ((hi - lo) - I) / alpha
+//     newval > oldval : dP =  I / alpha
+//
+// Cost is O(log n + events crossed), typically O(1) for tuned MH proposals.
+// ---------------------------------------------------------------------------
+// [[Rcpp::export]]
+double coalDeltaC(NumericVector leaves, NumericVector nodes, double alpha,
+                  double oldval, double newval) {
+  if (newval == oldval) return 0.0;
+  double lo = std::min(oldval, newval), hi = std::max(oldval, newval);
+  int nl = leaves.size(), nn = nodes.size();
+  int i1 = countGe(leaves, hi), i2 = countGe(nodes, hi);
+  int k = i1 - i2;                 // lineages just below hi in the new state
+  double I = 0.0, prev = hi;
+  while (true) {
+    double nextL = (i1 < nl) ? leaves[i1] : R_NegInf;
+    double nextN = (i2 < nn) ? nodes[i2] : R_NegInf;
+    double e = std::max(nextL, nextN);
+    if (!(e > lo)) break;          // events exactly at lo lie outside (lo,hi)
+    I += (double)k * (prev - e);
+    if (nextL >= nextN) { k++; i1++; } else { k--; i2++; }
+    prev = e;
+  }
+  I += (double)k * (prev - lo);
+  if (newval < oldval) return ((hi - lo) - I) / alpha;
+  return I / alpha;
+}
+
+// ---------------------------------------------------------------------------
 // Fast replacement for the internal-node-date MH loop of main.R (lines ~199-224).
 // Mutates tab (dates column) and orderednodedates in place; returns updated
 // l, p and sdDates. RNG consumption matches the original R loop exactly:
@@ -142,7 +236,9 @@ List nodeDatesUpdateC(NumericMatrix tab, int n,
       double newlocal = localLik(tab, j1, n, children, mu, sigma, minbralen, model, useRec);
       double l2 = l - oldlocal + newlocal;
       changeinorderedvec(orderednodedates, old, nw);
-      double p2 = useCoalPrior ? coalpriorC(orderedleafdates, orderednodedates, alpha) : 0.0;
+      double p2 = useCoalPrior
+        ? p + coalDeltaC(orderedleafdates, orderednodedates, alpha, old, nw)
+        : 0.0;
       mh = l2 - l + p2 - p;
       if (log(R::runif(0.0, 1.0)) < mh) {
         l = l2; p = p2;                 // accept: keep tab(row,2)=nw

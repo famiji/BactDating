@@ -10,6 +10,50 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// localTermsC
+double localTermsC(NumericMatrix tab, IntegerVector nodes1, double mu, double sigma, double minbralen, int model, bool useRec);
+RcppExport SEXP _BactDating_localTermsC(SEXP tabSEXP, SEXP nodes1SEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP minbralenSEXP, SEXP modelSEXP, SEXP useRecSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type nodes1(nodes1SEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< double >::type minbralen(minbralenSEXP);
+    Rcpp::traits::input_parameter< int >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< bool >::type useRec(useRecSEXP);
+    rcpp_result_gen = Rcpp::wrap(localTermsC(tab, nodes1, mu, sigma, minbralen, model, useRec));
+    return rcpp_result_gen;
+END_RCPP
+}
+// coalAlphaSumC
+double coalAlphaSumC(NumericVector leaves, NumericVector nodes);
+RcppExport SEXP _BactDating_coalAlphaSumC(SEXP leavesSEXP, SEXP nodesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type leaves(leavesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type nodes(nodesSEXP);
+    rcpp_result_gen = Rcpp::wrap(coalAlphaSumC(leaves, nodes));
+    return rcpp_result_gen;
+END_RCPP
+}
+// coalDeltaC
+double coalDeltaC(NumericVector leaves, NumericVector nodes, double alpha, double oldval, double newval);
+RcppExport SEXP _BactDating_coalDeltaC(SEXP leavesSEXP, SEXP nodesSEXP, SEXP alphaSEXP, SEXP oldvalSEXP, SEXP newvalSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type leaves(leavesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type nodes(nodesSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< double >::type oldval(oldvalSEXP);
+    Rcpp::traits::input_parameter< double >::type newval(newvalSEXP);
+    rcpp_result_gen = Rcpp::wrap(coalDeltaC(leaves, nodes, alpha, oldval, newval));
+    return rcpp_result_gen;
+END_RCPP
+}
 // nodeDatesUpdateC
 List nodeDatesUpdateC(NumericMatrix tab, int n, NumericVector orderedleafdates, NumericVector orderednodedates, NumericVector rn, double mu, double sigma, double l, double p, double alpha, double minbralen, double sdDates, int outerit, bool tuning, bool useCoalPrior, int model, bool useRec);
 RcppExport SEXP _BactDating_nodeDatesUpdateC(SEXP tabSEXP, SEXP nSEXP, SEXP orderedleafdatesSEXP, SEXP orderednodedatesSEXP, SEXP rnSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP lSEXP, SEXP pSEXP, SEXP alphaSEXP, SEXP minbralenSEXP, SEXP sdDatesSEXP, SEXP outeritSEXP, SEXP tuningSEXP, SEXP useCoalPriorSEXP, SEXP modelSEXP, SEXP useRecSEXP) {
@@ -140,6 +184,9 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_BactDating_localTermsC", (DL_FUNC) &_BactDating_localTermsC, 7},
+    {"_BactDating_coalAlphaSumC", (DL_FUNC) &_BactDating_coalAlphaSumC, 2},
+    {"_BactDating_coalDeltaC", (DL_FUNC) &_BactDating_coalDeltaC, 5},
     {"_BactDating_nodeDatesUpdateC", (DL_FUNC) &_BactDating_nodeDatesUpdateC, 17},
     {"_BactDating_coalpriorC", (DL_FUNC) &_BactDating_coalpriorC, 3},
     {"_BactDating_likelihoodGammaC", (DL_FUNC) &_BactDating_likelihoodGammaC, 2},
