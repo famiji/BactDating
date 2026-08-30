@@ -2,7 +2,7 @@
 using namespace Rcpp;
 
 // [[Rcpp::export]]
-double coalpriorC(NumericVector leaves, NumericVector nodes, double alpha) {
+double coalpriorC(const NumericVector& leaves, const NumericVector& nodes, double alpha) {
   int n=leaves.length();
   //NumericVector nodes = clone(intnodes);
   //std::sort(nodes.begin(), nodes.end(), std::greater<double>());

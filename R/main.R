@@ -149,6 +149,13 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
   for (i in 1:nrow(tab)) if (!is.na(tab[i,4])) children[[tab[i,4]]]=c(children[[tab[i,4]]],i)
   curroot=findCurrootC(tree$edge,children[[n+1]],n+1)
 
+  if (fast && modelcode>0 && !showProgress) {
+    #The entire MCMC loop runs in C++ (mcmcLoopC): mode 1 keeps the trajectory
+    #bit-identical to the default loop, mode 2 accumulates mathematically
+    #identical increments; RNG consumption matches the R loop draw by draw
+    res=mcmcLoopC(tab,tree$edge,n,nbIts,thin,orderedleafdates,orderednodedates,misDates,rangedate,mu,sigma,alpha,l,p,sdMu,sdSigma,sdDates,updateMu,updateSigma,updateAlpha,updateRoot==T,updateRoot=='branch',model=='mixedgamma'||model=='mixedcarc',tuning,useCoalPrior,modelcode,useRec,minbralen,ifelse(exact,1L,2L),record)
+    tab=res$tab;l=res$l;p=res$p;mu=res$mu;sigma=res$sigma;alpha=res$alpha;record=res$record
+  } else {
   for (i in 1:nbIts) {
     #Record
     if (i %% thin == 0) {
@@ -379,6 +386,7 @@ bactdate = function(tree, date, initMu = NA, initAlpha = NA, initSigma = NA, upd
     }
 
   }#End of MCMC loop
+  }
   if (showProgress) close(pb)
 
   #Output

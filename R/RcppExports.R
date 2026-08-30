@@ -5,6 +5,10 @@ localTermsC <- function(tab, nodes1, mu, sigma, minbralen, model, useRec) {
     .Call('_BactDating_localTermsC', PACKAGE = 'BactDating', tab, nodes1, mu, sigma, minbralen, model, useRec)
 }
 
+fullLikC <- function(tab, mu, sigma, minbralen, model, useRec) {
+    .Call('_BactDating_fullLikC', PACKAGE = 'BactDating', tab, mu, sigma, minbralen, model, useRec)
+}
+
 findCurrootC <- function(edge, rootchildren, rootnode) {
     .Call('_BactDating_findCurrootC', PACKAGE = 'BactDating', edge, rootchildren, rootnode)
 }
@@ -19,6 +23,10 @@ coalDeltaC <- function(leaves, nodes, alpha, oldval, newval) {
 
 nodeDatesUpdateC <- function(tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec, incrementalPrior) {
     .Call('_BactDating_nodeDatesUpdateC', PACKAGE = 'BactDating', tab, n, orderedleafdates, orderednodedates, rn, mu, sigma, l, p, alpha, minbralen, sdDates, outerit, tuning, useCoalPrior, model, useRec, incrementalPrior)
+}
+
+mcmcLoopC <- function(tab, edge, n, nbIts, thin, orderedleafdates, orderednodedates, misDates, rangedate, mu, sigma, alpha, l, p, sdMu, sdSigma, sdDates, updateMu, updateSigma, updateAlpha, updateRootAll, updateRootBranch, mixedModel, tuning, useCoalPrior, model, useRec, minbralen, mode, record) {
+    .Call('_BactDating_mcmcLoopC', PACKAGE = 'BactDating', tab, edge, n, nbIts, thin, orderedleafdates, orderednodedates, misDates, rangedate, mu, sigma, alpha, l, p, sdMu, sdSigma, sdDates, updateMu, updateSigma, updateAlpha, updateRootAll, updateRootBranch, mixedModel, tuning, useCoalPrior, model, useRec, minbralen, mode, record)
 }
 
 coalpriorC <- function(leaves, nodes, alpha) {

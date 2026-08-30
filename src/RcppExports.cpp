@@ -11,12 +11,12 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // localTermsC
-double localTermsC(NumericMatrix tab, IntegerVector nodes1, double mu, double sigma, double minbralen, int model, bool useRec);
+double localTermsC(const NumericMatrix& tab, IntegerVector nodes1, double mu, double sigma, double minbralen, int model, bool useRec);
 RcppExport SEXP _BactDating_localTermsC(SEXP tabSEXP, SEXP nodes1SEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP minbralenSEXP, SEXP modelSEXP, SEXP useRecSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type tab(tabSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type nodes1(nodes1SEXP);
     Rcpp::traits::input_parameter< double >::type mu(muSEXP);
     Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
@@ -27,13 +27,29 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fullLikC
+double fullLikC(const NumericMatrix& tab, double mu, double sigma, double minbralen, int model, bool useRec);
+RcppExport SEXP _BactDating_fullLikC(SEXP tabSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP minbralenSEXP, SEXP modelSEXP, SEXP useRecSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< double >::type minbralen(minbralenSEXP);
+    Rcpp::traits::input_parameter< int >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< bool >::type useRec(useRecSEXP);
+    rcpp_result_gen = Rcpp::wrap(fullLikC(tab, mu, sigma, minbralen, model, useRec));
+    return rcpp_result_gen;
+END_RCPP
+}
 // findCurrootC
-int findCurrootC(NumericMatrix edge, NumericVector rootchildren, int rootnode);
+int findCurrootC(const NumericMatrix& edge, NumericVector rootchildren, int rootnode);
 RcppExport SEXP _BactDating_findCurrootC(SEXP edgeSEXP, SEXP rootchildrenSEXP, SEXP rootnodeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type edge(edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type edge(edgeSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type rootchildren(rootchildrenSEXP);
     Rcpp::traits::input_parameter< int >::type rootnode(rootnodeSEXP);
     rcpp_result_gen = Rcpp::wrap(findCurrootC(edge, rootchildren, rootnode));
@@ -41,25 +57,25 @@ BEGIN_RCPP
 END_RCPP
 }
 // coalAlphaSumC
-double coalAlphaSumC(NumericVector leaves, NumericVector nodes);
+double coalAlphaSumC(const NumericVector& leaves, const NumericVector& nodes);
 RcppExport SEXP _BactDating_coalAlphaSumC(SEXP leavesSEXP, SEXP nodesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type leaves(leavesSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type nodes(nodesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type leaves(leavesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type nodes(nodesSEXP);
     rcpp_result_gen = Rcpp::wrap(coalAlphaSumC(leaves, nodes));
     return rcpp_result_gen;
 END_RCPP
 }
 // coalDeltaC
-double coalDeltaC(NumericVector leaves, NumericVector nodes, double alpha, double oldval, double newval);
+double coalDeltaC(const NumericVector& leaves, const NumericVector& nodes, double alpha, double oldval, double newval);
 RcppExport SEXP _BactDating_coalDeltaC(SEXP leavesSEXP, SEXP nodesSEXP, SEXP alphaSEXP, SEXP oldvalSEXP, SEXP newvalSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type leaves(leavesSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type nodes(nodesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type leaves(leavesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type nodes(nodesSEXP);
     Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
     Rcpp::traits::input_parameter< double >::type oldval(oldvalSEXP);
     Rcpp::traits::input_parameter< double >::type newval(newvalSEXP);
@@ -95,14 +111,54 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// mcmcLoopC
+List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, int thin, NumericVector orderedleafdates, NumericVector orderednodedates, IntegerVector misDates, const NumericMatrix& rangedate, double mu, double sigma, double alpha, double l, double p, double sdMu, double sdSigma, double sdDates, bool updateMu, bool updateSigma, bool updateAlpha, bool updateRootAll, bool updateRootBranch, bool mixedModel, bool tuning, bool useCoalPrior, int model, bool useRec, double minbralen, int mode, NumericMatrix record);
+RcppExport SEXP _BactDating_mcmcLoopC(SEXP tabSEXP, SEXP edgeSEXP, SEXP nSEXP, SEXP nbItsSEXP, SEXP thinSEXP, SEXP orderedleafdatesSEXP, SEXP orderednodedatesSEXP, SEXP misDatesSEXP, SEXP rangedateSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP alphaSEXP, SEXP lSEXP, SEXP pSEXP, SEXP sdMuSEXP, SEXP sdSigmaSEXP, SEXP sdDatesSEXP, SEXP updateMuSEXP, SEXP updateSigmaSEXP, SEXP updateAlphaSEXP, SEXP updateRootAllSEXP, SEXP updateRootBranchSEXP, SEXP mixedModelSEXP, SEXP tuningSEXP, SEXP useCoalPriorSEXP, SEXP modelSEXP, SEXP useRecSEXP, SEXP minbralenSEXP, SEXP modeSEXP, SEXP recordSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type edge(edgeSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type nbIts(nbItsSEXP);
+    Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type orderedleafdates(orderedleafdatesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type orderednodedates(orderednodedatesSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type misDates(misDatesSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type rangedate(rangedateSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< double >::type l(lSEXP);
+    Rcpp::traits::input_parameter< double >::type p(pSEXP);
+    Rcpp::traits::input_parameter< double >::type sdMu(sdMuSEXP);
+    Rcpp::traits::input_parameter< double >::type sdSigma(sdSigmaSEXP);
+    Rcpp::traits::input_parameter< double >::type sdDates(sdDatesSEXP);
+    Rcpp::traits::input_parameter< bool >::type updateMu(updateMuSEXP);
+    Rcpp::traits::input_parameter< bool >::type updateSigma(updateSigmaSEXP);
+    Rcpp::traits::input_parameter< bool >::type updateAlpha(updateAlphaSEXP);
+    Rcpp::traits::input_parameter< bool >::type updateRootAll(updateRootAllSEXP);
+    Rcpp::traits::input_parameter< bool >::type updateRootBranch(updateRootBranchSEXP);
+    Rcpp::traits::input_parameter< bool >::type mixedModel(mixedModelSEXP);
+    Rcpp::traits::input_parameter< bool >::type tuning(tuningSEXP);
+    Rcpp::traits::input_parameter< bool >::type useCoalPrior(useCoalPriorSEXP);
+    Rcpp::traits::input_parameter< int >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< bool >::type useRec(useRecSEXP);
+    Rcpp::traits::input_parameter< double >::type minbralen(minbralenSEXP);
+    Rcpp::traits::input_parameter< int >::type mode(modeSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type record(recordSEXP);
+    rcpp_result_gen = Rcpp::wrap(mcmcLoopC(tab, edge, n, nbIts, thin, orderedleafdates, orderednodedates, misDates, rangedate, mu, sigma, alpha, l, p, sdMu, sdSigma, sdDates, updateMu, updateSigma, updateAlpha, updateRootAll, updateRootBranch, mixedModel, tuning, useCoalPrior, model, useRec, minbralen, mode, record));
+    return rcpp_result_gen;
+END_RCPP
+}
 // coalpriorC
-double coalpriorC(NumericVector leaves, NumericVector nodes, double alpha);
+double coalpriorC(const NumericVector& leaves, const NumericVector& nodes, double alpha);
 RcppExport SEXP _BactDating_coalpriorC(SEXP leavesSEXP, SEXP nodesSEXP, SEXP alphaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type leaves(leavesSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type nodes(nodesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type leaves(leavesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type nodes(nodesSEXP);
     Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
     rcpp_result_gen = Rcpp::wrap(coalpriorC(leaves, nodes, alpha));
     return rcpp_result_gen;
@@ -199,10 +255,12 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_BactDating_localTermsC", (DL_FUNC) &_BactDating_localTermsC, 7},
+    {"_BactDating_fullLikC", (DL_FUNC) &_BactDating_fullLikC, 6},
     {"_BactDating_findCurrootC", (DL_FUNC) &_BactDating_findCurrootC, 3},
     {"_BactDating_coalAlphaSumC", (DL_FUNC) &_BactDating_coalAlphaSumC, 2},
     {"_BactDating_coalDeltaC", (DL_FUNC) &_BactDating_coalDeltaC, 5},
     {"_BactDating_nodeDatesUpdateC", (DL_FUNC) &_BactDating_nodeDatesUpdateC, 18},
+    {"_BactDating_mcmcLoopC", (DL_FUNC) &_BactDating_mcmcLoopC, 30},
     {"_BactDating_coalpriorC", (DL_FUNC) &_BactDating_coalpriorC, 3},
     {"_BactDating_likelihoodGammaC", (DL_FUNC) &_BactDating_likelihoodGammaC, 2},
     {"_BactDating_likelihoodRelaxedgammaC", (DL_FUNC) &_BactDating_likelihoodRelaxedgammaC, 3},

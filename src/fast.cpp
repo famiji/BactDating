@@ -3,7 +3,7 @@
 using namespace Rcpp;
 
 // Prototypes of functions defined in probs.cpp (same shared library).
-double coalpriorC(NumericVector leaves, NumericVector nodes, double alpha);
+double coalpriorC(const NumericVector& leaves, const NumericVector& nodes, double alpha);
 void changeinorderedvec(NumericVector vec, double old, double n);
 
 // ---------------------------------------------------------------------------
@@ -95,11 +95,46 @@ static double localLik(const NumericMatrix& tab, int j1, int n,
 // in the given order. Used to localize the root-move likelihood updates.
 // ---------------------------------------------------------------------------
 // [[Rcpp::export]]
-double localTermsC(NumericMatrix tab, IntegerVector nodes1, double mu, double sigma,
+double localTermsC(const NumericMatrix& tab, IntegerVector nodes1, double mu, double sigma,
                    double minbralen, int model, bool useRec) {
   double s = 0.0;
   for (int i = 0; i < nodes1.size(); ++i)
     s += termC(tab, nodes1[i] - 1, mu, sigma, minbralen, model, useRec);
+  return s;
+}
+
+// Same as localTermsC but without the SEXP-wrapping cost: used from the C++
+// MCMC loop where the index set is already a plain integer vector.
+static inline double localTermsVec(const NumericMatrix& tab, const std::vector<int>& nodes1,
+                                   double mu, double sigma, double minbralen,
+                                   int model, bool useRec) {
+  double s = 0.0;
+  for (size_t i = 0; i < nodes1.size(); ++i)
+    s += termC(tab, nodes1[i] - 1, mu, sigma, minbralen, model, useRec);
+  return s;
+}
+
+// Non-static alias for cross-file use (mcmcLoopC.cpp).
+double localTermsVecC(const NumericMatrix& tab, const std::vector<int>& nodes1,
+                      double mu, double sigma, double minbralen,
+                      int model, bool useRec) {
+  return localTermsVec(tab, nodes1, mu, sigma, minbralen, model, useRec);
+}
+
+// ---------------------------------------------------------------------------
+// Full-table log-likelihood via termC, replicating the row order of the
+// likelihoodXC functions in probs.cpp (all rows in order, root row n+1
+// skipped). Bit-identical to them.
+// ---------------------------------------------------------------------------
+// [[Rcpp::export]]
+double fullLikC(const NumericMatrix& tab, double mu, double sigma,
+                double minbralen, int model, bool useRec) {
+  int n = (tab.nrow() + 1) / 2;
+  double s = 0.0;
+  for (int i = 0; i < tab.nrow(); ++i) {
+    if (i == n) continue;
+    s += termC(tab, i, mu, sigma, minbralen, model, useRec);
+  }
   return s;
 }
 
@@ -131,7 +166,7 @@ static int countGt(const NumericVector& v, double val) {
 // overhead. rootchildren holds the two children of the global root n+1.
 // ---------------------------------------------------------------------------
 // [[Rcpp::export]]
-int findCurrootC(NumericMatrix edge, NumericVector rootchildren, int rootnode) {
+int findCurrootC(const NumericMatrix& edge, NumericVector rootchildren, int rootnode) {
   double r1 = rootchildren[0], r2 = rootchildren[1];
   for (int j = 0; j < edge.nrow(); ++j) {
     double e1 = edge(j, 0), e2 = edge(j, 1);
@@ -152,7 +187,7 @@ int findCurrootC(NumericMatrix edge, NumericVector rootchildren, int rootnode) {
 // values is zero and the count after the tied block is order-independent).
 // ---------------------------------------------------------------------------
 // [[Rcpp::export]]
-double coalAlphaSumC(NumericVector leaves, NumericVector nodes) {
+double coalAlphaSumC(const NumericVector& leaves, const NumericVector& nodes) {
   std::vector<double> lv(leaves.begin(), leaves.end());
   std::vector<double> nd(nodes.begin(), nodes.end());
   std::sort(lv.begin(), lv.end(), std::greater<double>());
@@ -191,7 +226,7 @@ double coalAlphaSumC(NumericVector leaves, NumericVector nodes) {
 // Cost is O(log n + events crossed), typically O(1) for tuned MH proposals.
 // ---------------------------------------------------------------------------
 // [[Rcpp::export]]
-double coalDeltaC(NumericVector leaves, NumericVector nodes, double alpha,
+double coalDeltaC(const NumericVector& leaves, const NumericVector& nodes, double alpha,
                   double oldval, double newval) {
   if (newval == oldval) return 0.0;
   double lo = std::min(oldval, newval), hi = std::max(oldval, newval);
