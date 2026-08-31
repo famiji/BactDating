@@ -270,7 +270,8 @@ double coalAlphaSumSortedC(const NumericVector& leaves, const NumericVector& nod
   const double* nd = nodes.begin();
   int nl = (int)leaves.size(), nn = (int)nodes.size();
   int i1 = 0, i2 = 0, k = 0;
-  double su = 0.0, prev = 0.0;
+  long double su = 0.0;
+  double prev = 0.0;
   bool first = true;
   while (i1 < nl || i2 < nn) {
     double e; bool isLeaf;
@@ -282,7 +283,7 @@ double coalAlphaSumSortedC(const NumericVector& leaves, const NumericVector& nod
     first = false;
     if (isLeaf) i1++; else i2++;
   }
-  return su;
+  return (double)su;
 }
 
 // ---------------------------------------------------------------------------
