@@ -151,6 +151,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// leafDatesC
+NumericVector leafDatesC(const IntegerMatrix& edge, const NumericVector& elen, int ntip, double rootdate);
+RcppExport SEXP _BactDating_leafDatesC(SEXP edgeSEXP, SEXP elenSEXP, SEXP ntipSEXP, SEXP rootdateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const IntegerMatrix& >::type edge(edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type elen(elenSEXP);
+    Rcpp::traits::input_parameter< int >::type ntip(ntipSEXP);
+    Rcpp::traits::input_parameter< double >::type rootdate(rootdateSEXP);
+    rcpp_result_gen = Rcpp::wrap(leafDatesC(edge, elen, ntip, rootdate));
+    return rcpp_result_gen;
+END_RCPP
+}
 // coalpriorC
 double coalpriorC(const NumericVector& leaves, const NumericVector& nodes, double alpha);
 RcppExport SEXP _BactDating_coalpriorC(SEXP leavesSEXP, SEXP nodesSEXP, SEXP alphaSEXP) {
@@ -261,6 +275,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_BactDating_coalDeltaC", (DL_FUNC) &_BactDating_coalDeltaC, 5},
     {"_BactDating_nodeDatesUpdateC", (DL_FUNC) &_BactDating_nodeDatesUpdateC, 18},
     {"_BactDating_mcmcLoopC", (DL_FUNC) &_BactDating_mcmcLoopC, 30},
+    {"_BactDating_leafDatesC", (DL_FUNC) &_BactDating_leafDatesC, 4},
     {"_BactDating_coalpriorC", (DL_FUNC) &_BactDating_coalpriorC, 3},
     {"_BactDating_likelihoodGammaC", (DL_FUNC) &_BactDating_likelihoodGammaC, 2},
     {"_BactDating_likelihoodRelaxedgammaC", (DL_FUNC) &_BactDating_likelihoodRelaxedgammaC, 3},

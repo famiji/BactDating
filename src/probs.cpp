@@ -1,5 +1,49 @@
 #include <Rcpp.h>
+#include <vector>
 using namespace Rcpp;
+
+// ---------------------------------------------------------------------------
+// C++ reimplementation of leafDates() from R/roototip.R.
+//
+// The original R version walks each leaf up to the root, using which() to
+// find the row of the edge whose child (=edge[,2]) is the current node.
+// That which() is an O(n) scan per step, making the whole function O(n^2
+// log n) - it dominated >90% of bactdate() runtime at n=1000 (Rprof).
+//
+// This version pre-builds a direct-mapped lookup table (child node number
+// -> edge row index) so each step is O(1), bringing the total to O(n).
+//
+// The floating-point accumulation order is IDENTICAL to the R version:
+//   dates[i] = rootdate
+//   dates[i] = dates[i] + edge.length[r]   (leaf -> parent)
+//   dates[i] = dates[i] + edge.length[r]   (parent -> grandparent)
+//   ...
+// so the result is bit-identical to leafDates() on the same tree, which
+// keeps the initial rate (mu0) unchanged and thus preserves the MCMC
+// trajectory bit-for-bit (roottotip runs after set.seed, but leafDates
+// itself consumes no RNG - only the permutation test does).
+// ---------------------------------------------------------------------------
+// [[Rcpp::export]]
+NumericVector leafDatesC(const IntegerMatrix& edge, const NumericVector& elen,
+                         int ntip, double rootdate) {
+  int ne = edge.nrow();
+  int ntotal = 2 * ntip - 1;            // max node number
+  std::vector<int> child2row(ntotal + 1, -1);
+  for (int r = 0; r < ne; ++r)
+    child2row[edge(r, 1)] = r;          // 1-based child -> 0-based row
+  NumericVector dates(ntip);
+  for (int i = 0; i < ntip; ++i) dates[i] = rootdate;
+  for (int i = 0; i < ntip; ++i) {
+    int w = i + 1;                       // 1-based leaf
+    while (true) {
+      int r = child2row[w];
+      if (r < 0) break;                  // reached root
+      dates[i] += elen[r];
+      w = edge(r, 0);                    // parent node
+    }
+  }
+  return dates;
+}
 
 // [[Rcpp::export]]
 double coalpriorC(const NumericVector& leaves, const NumericVector& nodes, double alpha) {

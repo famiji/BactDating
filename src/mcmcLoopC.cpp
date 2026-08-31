@@ -3,12 +3,15 @@
 using namespace Rcpp;
 
 // Prototypes of functions defined in fast.cpp (same shared library).
-double coalAlphaSumC(const NumericVector& leaves, const NumericVector& nodes);
+double coalAlphaSumSortedC(const NumericVector& leaves, const NumericVector& nodes);
 double coalDeltaC(const NumericVector& leaves, const NumericVector& nodes, double alpha,
                   double oldval, double newval);
 double localTermsC(const NumericMatrix& tab, IntegerVector nodes1, double mu, double sigma,
                    double minbralen, int model, bool useRec);
 double localTermsVecC(const NumericMatrix& tab, const std::vector<int>& nodes1,
+                      double mu, double sigma, double minbralen,
+                      int model, bool useRec);
+double localTermsArrC(const NumericMatrix& tab, const int* nodes1, int n1,
                       double mu, double sigma, double minbralen,
                       int model, bool useRec);
 double fullLikC(const NumericMatrix& tab, double mu, double sigma,
@@ -72,6 +75,8 @@ List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, i
   int msteps = 2 * ne - 2;             // merge steps after the initial leaf
   std::vector<double> Ssum, PrevS;
   std::vector<int> I1s, I2s;
+  std::vector<double> inc;             // P4: per-step increments of the current state
+  std::vector<double> winInc;          // P4: proposal-state window increments (scratch)
   int X = 0;
   auto countGtL = [&](double val) {
     int lo = 0, hi = ne;
@@ -83,30 +88,100 @@ List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, i
     while (lo < hi) { int mid = (lo + hi) / 2; if (ND[mid] > val) lo = mid + 1; else hi = mid; }
     return lo;
   };
+  // P4: counts of events >= val (decreasing order), for the identical-tail
+  // boundary pos_lo.
+  auto countGeL = [&](double val) {
+    int lo = 0, hi = ne;
+    while (lo < hi) { int mid = (lo + hi) / 2; if (LV[mid] >= val) lo = mid + 1; else hi = mid; }
+    return lo;
+  };
+  auto countGeN = [&](double val) {
+    int lo = 0, hi = ne - 1;
+    while (lo < hi) { int mid = (lo + hi) / 2; if (ND[mid] >= val) lo = mid + 1; else hi = mid; }
+    return lo;
+  };
+  // P1: lookup table of the coalescent weight k*(k-1)/(2*alpha). Every entry
+  // is computed with the exact same expression coalpriorC evaluates inline,
+  // so a table read is bit-identical to recomputing it, and the hot walk
+  // drops one multiplication + one division per step. Rebuilt whenever alpha
+  // changes (Gibbs update); k stays within [0, ne] for any valid walk over a
+  // binary tree's dates. Only built/used in exact mode (COAL_STEP users).
+  std::vector<double> coalw(ne + 1);
+  auto buildCoalw = [&]() {
+    for (int k = 0; k <= ne; ++k) coalw[k] = k * (k - 1.0) / (2.0 * alpha);
+  };
+  // P2: cache entries are written only every COAL_CK steps ("checkpoints").
+  // X always sits on a checkpoint; a read at an arbitrary pos_hi restarts
+  // from the checkpoint at or below it (at most COAL_CK-1 recomputed steps)
+  // instead of storing all four arrays every step. This cuts the cache write
+  // traffic ~COAL_CK-fold while the walked arithmetic - and therefore every
+  // bit of p2 - is unchanged.
+  // P4 changed the invalidation story: the proposal walk writes NO
+  // checkpoints (the identical tail is served from the increment cache inc[]
+  // instead), so every checkpoint <= c lies in the prefix identical to both
+  // states. On accept X = c; on reject X is left untouched.
+  #define COAL_CK 32
+  #define COAL_CKPT(sumvar, t)                                                 \
+    if ((t) % COAL_CK == 0) { Ssum[t] = sumvar; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev; }
   // One merge step of the coalpriorC walk (inlined, same arithmetic/order).
   // Consumes the newer of LV[i1], ND[i2] into the running sum *pp.
   #define COAL_STEP(pp)                                                        \
     do {                                                                       \
       int k = i1 - i2;                                                         \
       if (i1 < ne && LV[i1] > ND[i2]) {                                        \
-        pp = pp - (k * (k - 1.0) / (2.0 * alpha) * (prev - LV[i1]));           \
+        pp = pp - (coalw[k] * (prev - LV[i1]));                                \
         prev = LV[i1++];                                                       \
       } else {                                                                 \
-        pp = pp - (k * (k - 1.0) / (2.0 * alpha) * (prev - ND[i2]));           \
+        pp = pp - (coalw[k] * (prev - ND[i2]));                                \
+        prev = ND[i2++];                                                       \
+      }                                                                        \
+    } while (0)
+  // P4: same step, but additionally stores the per-step increment
+  // inc[t] = coalw[k]*(prev - event) into the increment cache.
+  #define COAL_STEP_INC(pp, t)                                                 \
+    do {                                                                       \
+      int k = i1 - i2;                                                         \
+      if (i1 < ne && LV[i1] > ND[i2]) {                                        \
+        double w = coalw[k] * (prev - LV[i1]);                                 \
+        inc[(t)] = w;                                                          \
+        pp = pp - w;                                                           \
+        prev = LV[i1++];                                                       \
+      } else {                                                                 \
+        double w = coalw[k] * (prev - ND[i2]);                                 \
+        inc[(t)] = w;                                                          \
+        pp = pp - w;                                                           \
+        prev = ND[i2++];                                                       \
+      }                                                                        \
+    } while (0)
+  // P4: same step, stashing the increment into winInc (proposal-state window).
+  #define COAL_STEP_WIN(pp, t)                                                 \
+    do {                                                                       \
+      int k = i1 - i2;                                                         \
+      if (i1 < ne && LV[i1] > ND[i2]) {                                        \
+        double w = coalw[k] * (prev - LV[i1]);                                 \
+        winInc[(t)] = w;                                                       \
+        pp = pp - w;                                                           \
+        prev = LV[i1++];                                                       \
+      } else {                                                                 \
+        double w = coalw[k] * (prev - ND[i2]);                                 \
+        winInc[(t)] = w;                                                       \
+        pp = pp - w;                                                           \
         prev = ND[i2++];                                                       \
       }                                                                        \
     } while (0)
   if (exact) {
     Ssum.resize(msteps + 1); PrevS.resize(msteps + 1);
     I1s.resize(msteps + 1); I2s.resize(msteps + 1);
+    inc.resize(msteps + 1); winInc.resize(msteps + 1);
+    buildCoalw();
     double pp = -log(alpha) * (ne - 1);
     int i1 = 1, i2 = 0; double prev = LV[0];
     Ssum[0] = pp; I1s[0] = 1; I2s[0] = 0; PrevS[0] = prev;
     for (int t = 1; t <= msteps; ++t) {
-      COAL_STEP(pp);
-      Ssum[t] = pp; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev;
+      COAL_STEP_INC(pp, t);
+      COAL_CKPT(pp, t);
     }
-    X = msteps;
+    X = (msteps / COAL_CK) * COAL_CK;
   }
 
   // Slow-mode prior: full likelihood on explicitly built 3/4-row mintabs,
@@ -142,6 +217,7 @@ List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, i
   };
 
   std::vector<int> terms;              // reused index set for local terms
+  NumericVector rn(nint);              // preallocated per-iteration proposal noise
   for (int i = 1; i <= nbIts; ++i) {
     //Record
     if (i % thin == 0) {
@@ -199,24 +275,25 @@ List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, i
 
     if (updateAlpha) {
       //Gibbs move using inverse-gamma prior
-      double su = coalAlphaSumC(orderedleafdates, orderednodedates);
+      double su = coalAlphaSumSortedC(orderedleafdates, orderednodedates);
       alpha = 1.0 / R::rgamma(n + 0.001 - 1.0, 2000.0 / (su * 1000.0 + 2.0));
       p = useCoalPrior ? coalpriorC(orderedleafdates, orderednodedates, alpha) : 0.0;
       if (exact) {
-        //rebuild the prefix cache for the new alpha
+        //rebuild the weight table and prefix cache for the new alpha
+        buildCoalw();
         double pp = -log(alpha) * (ne - 1);
         int i1 = 1, i2 = 0; double prev = LV[0];
         Ssum[0] = pp; I1s[0] = 1; I2s[0] = 0; PrevS[0] = prev;
         for (int t = 1; t <= msteps; ++t) {
-          COAL_STEP(pp);
-          Ssum[t] = pp; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev;
+          COAL_STEP_INC(pp, t);
+          COAL_CKPT(pp, t);
         }
-        X = msteps;
+        X = (msteps / COAL_CK) * COAL_CK;
       }
     }
 
     //MH to update internal dates
-    NumericVector rn = rnorm(nint, 0.0, sdDates);
+    for (int q = 0; q < nint; ++q) rn[q] = R::rnorm(0.0, sdDates);
     for (int j1 = n + 1; j1 <= nrowtab; ++j1) {
       double r = rn[j1 - n - 1];
       int row = j1 - 1;
@@ -240,17 +317,30 @@ List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, i
           double newlocal = slowNodeLocal(j1, nw);
           l2 = l - oldlocal + newlocal;
         } else {
-          terms = ch;
-          if (j1 != n + 1) terms.push_back(j1);
-          double oldlocal = localTermsVecC(tab, terms, mu, sigma, minbralen, model, useRec);
-          tab(row, 2) = nw;
-          double newlocal = localTermsVecC(tab, terms, mu, sigma, minbralen, model, useRec);
-          l2 = l - oldlocal + newlocal;
+          if (ch.size() < 16) {
+            int termarr[16];
+            int nterm = (int)ch.size();
+            for (int k = 0; k < nterm; ++k) termarr[k] = ch[k];
+            if (j1 != n + 1) termarr[nterm++] = j1;
+            double oldlocal = localTermsArrC(tab, termarr, nterm, mu, sigma, minbralen, model, useRec);
+            tab(row, 2) = nw;
+            double newlocal = localTermsArrC(tab, termarr, nterm, mu, sigma, minbralen, model, useRec);
+            l2 = l - oldlocal + newlocal;
+          } else {
+            terms = ch;
+            if (j1 != n + 1) terms.push_back(j1);
+            double oldlocal = localTermsVecC(tab, terms, mu, sigma, minbralen, model, useRec);
+            tab(row, 2) = nw;
+            double newlocal = localTermsVecC(tab, terms, mu, sigma, minbralen, model, useRec);
+            l2 = l - oldlocal + newlocal;
+          }
           //date stays set to nw; reverted below on rejection
         }
         changeinorderedvec(orderednodedates, old, nw);
         double p2;
         int pos_hi = 0;
+        int c = 0;                       //checkpoint at or below pos_hi (exact path)
+        int winEnd = 0;                  //P4: last walked (non-cached) step
         if (!useCoalPrior) {
           p2 = 0.0;
         } else if (mode == 0 || fast) {
@@ -263,33 +353,56 @@ List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, i
           double hi = nw > old ? nw : old;
           pos_hi = countGtL(hi) + countGtN(hi);
           if (pos_hi > 0) pos_hi--;
-          if (pos_hi > X) {
-            // Extend the cache over events > hi (identical in both states).
+          // P2: advance the valid boundary X to the checkpoint at or below
+          // pos_hi (that prefix is identical in both states), writing
+          // checkpoints only.
+          c = (pos_hi / COAL_CK) * COAL_CK;
+          if (c > X) {
             double pp = Ssum[X];
             int i1 = I1s[X], i2 = I2s[X]; double prev = PrevS[X];
-            for (int t = X + 1; t <= pos_hi; ++t) {
+            for (int t = X + 1; t <= c; ++t) {
               COAL_STEP(pp);
-              Ssum[t] = pp; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev;
+              COAL_CKPT(pp, t);
             }
-            X = pos_hi;
+            X = c;
           }
-          // Walk the tail over the proposed arrays: the same operations, in
-          // the same order, as coalpriorC from that point on.
-          p2 = Ssum[pos_hi];
-          int i1 = I1s[pos_hi], i2 = I2s[pos_hi]; double prev = PrevS[pos_hi];
-          for (int t = pos_hi + 1; t <= msteps; ++t) {
-            COAL_STEP(p2);
-            Ssum[t] = p2; I1s[t] = i1; I2s[t] = i2; PrevS[t] = prev;
-          }
+          // Restart from that checkpoint and walk up to pos_hi (no writes).
+          p2 = Ssum[c];
+          int i1 = I1s[c], i2 = I2s[c]; double prev = PrevS[c];
+          for (int t = c + 1; t <= pos_hi; ++t) COAL_STEP(p2);
+          // P4: identical-tail boundary. Let lo = min(old,nw). The state-
+          // dependent events are exactly those with date in [lo,hi] (the ones
+          // involving old/nw); events with date < lo are identical in both
+          // states and occupy positions countGe(lo)+1 .. end. Since
+          // inc[t] = coalw[k_t]*(e_t - e_{t+1}) and k_t is a leaf-minus-node
+          // count (old,nw are the same node, so counts match), inc[t] is
+          // state-independent iff both e_t and e_{t+1} have date < lo, i.e.
+          // iff t >= countGe(lo)+1. So the window must be walked through
+          // t = countGe(lo) and only steps >= countGe(lo)+1 may use the cache.
+          double lo = nw < old ? nw : old;
+          winEnd = countGeL(lo) + countGeN(lo);   // = countGe(lo)
+          if (winEnd > msteps) winEnd = msteps;
+          // Window walk over the proposed arrays (stashing increments).
+          for (int t = pos_hi + 1; t <= winEnd; ++t) COAL_STEP_WIN(p2, t);
+          // Identical tail: subtract cached current-state increments in the
+          // original left-to-right order (bit-identical accumulation).
+          for (int t = winEnd + 1; t <= msteps; ++t) p2 -= inc[t];
         }
         mh = l2 - l + p2 - p;
         if (log(R::runif(0.0, 1.0)) < mh) {
           l = l2; p = p2;                 //accept: keep nw
-          if (exact) X = msteps;          //tail sums now describe the new state
+          if (exact) {
+            // P4: refresh the window increments for the new state; tail
+            // increments are already correct. No checkpoint was written during
+            // the proposal and every checkpoint <= c lies in the prefix
+            // identical to both states, so X = c.
+            for (int t = pos_hi + 1; t <= winEnd; ++t) inc[t] = winInc[t];
+            X = c;
+          }
         } else {
           changeinorderedvec(orderednodedates, nw, old);
           tab(row, 2) = old;              //reject: revert date
-          if (exact) X = pos_hi;          //cache valid only up to the prefix
+          // P4: proposal wrote no checkpoints and left inc untouched.
         }
       }
       if (tuning) {
@@ -318,20 +431,49 @@ List mcmcLoopC(NumericMatrix tab, const NumericMatrix& edge, int n, int nbIts, i
       }
       changeinorderedvec(orderedleafdates, old, nw);
       double p2;
+      int pos_hi = 0;
+      int c = 0;                     //checkpoint at or below pos_hi (exact path)
+      int winEnd = 0;                //P4: last walked (non-cached) step
       if (!useCoalPrior) p2 = 0.0;
       else if (mode == 0) p2 = coalpriorC(orderedleafdates, orderednodedates, alpha);
       else if (fast) p2 = p + coalDeltaC(orderedleafdates, orderednodedates, alpha, old, nw);
-      else { //exact: full bit-identical sweep (mintab path in R also recomputes fully)
-        double pp = -log(alpha) * (ne - 1);
-        int i1 = 1, i2 = 0; double prev = LV[0];
-        for (int t = 1; t <= msteps; ++t) COAL_STEP(pp);
-        p2 = pp;
+      else { //exact: bit-identical prefix-cache tail walk (same as node dates)
+        double hi = nw > old ? nw : old;
+        pos_hi = countGtL(hi) + countGtN(hi);
+        if (pos_hi > 0) pos_hi--;
+        // P2: advance the valid boundary X to the checkpoint at or below
+        // pos_hi (identical in both states), writing checkpoints only.
+        c = (pos_hi / COAL_CK) * COAL_CK;
+        if (c > X) {
+          double pp = Ssum[X];
+          int i1 = I1s[X], i2 = I2s[X]; double prev = PrevS[X];
+          for (int t = X + 1; t <= c; ++t) {
+            COAL_STEP(pp);
+            COAL_CKPT(pp, t);
+          }
+          X = c;
+        }
+        // Restart from that checkpoint and walk up to pos_hi (no writes).
+        p2 = Ssum[c];
+        int i1 = I1s[c], i2 = I2s[c]; double prev = PrevS[c];
+        for (int t = c + 1; t <= pos_hi; ++t) COAL_STEP(p2);
+        // P4: identical-tail boundary (same reasoning as the node branch).
+        double lo = nw < old ? nw : old;
+        winEnd = countGeL(lo) + countGeN(lo);   // = countGe(lo)
+        if (winEnd > msteps) winEnd = msteps;
+        for (int t = pos_hi + 1; t <= winEnd; ++t) COAL_STEP_WIN(p2, t);
+        for (int t = winEnd + 1; t <= msteps; ++t) p2 -= inc[t];
       }
       if (log(R::runif(0.0, 1.0)) < l2 - l + p2 - p) {
         l = l2; p = p2;
+        if (exact) {
+          for (int t = pos_hi + 1; t <= winEnd; ++t) inc[t] = winInc[t];
+          X = c;
+        }
       } else {
         changeinorderedvec(orderedleafdates, nw, old);
         tab(row, 2) = old;
+        // P4: proposal wrote no checkpoints and left inc untouched.
       }
     }
 

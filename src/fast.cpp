@@ -1,5 +1,8 @@
 #include <Rcpp.h>
 #include <vector>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 using namespace Rcpp;
 
 // Prototypes of functions defined in probs.cpp (same shared library).
@@ -121,17 +124,65 @@ double localTermsVecC(const NumericMatrix& tab, const std::vector<int>& nodes1,
   return localTermsVec(tab, nodes1, mu, sigma, minbralen, model, useRec);
 }
 
+// Same, taking a plain C array + length: lets the MCMC loop pass a fixed-size
+// stack buffer instead of copying a std::vector per node update.
+double localTermsArrC(const NumericMatrix& tab, const int* nodes1, int n1,
+                      double mu, double sigma, double minbralen,
+                      int model, bool useRec) {
+  double s = 0.0;
+  for (int i = 0; i < n1; ++i)
+    s += termC(tab, nodes1[i] - 1, mu, sigma, minbralen, model, useRec);
+  return s;
+}
+
 // ---------------------------------------------------------------------------
 // Full-table log-likelihood via termC, replicating the row order of the
 // likelihoodXC functions in probs.cpp (all rows in order, root row n+1
 // skipped). Bit-identical to them.
+//
+// The per-row terms are mutually independent (termC only reads tab and calls
+// pure Rmath density functions - no RNG, no global state), so on OpenMP-capable
+// builds (Linux toolchains; enabled via src/Makevars) the terms are evaluated
+// in parallel into a buffer and then summed strictly in row order, which
+// reproduces the original sequential accumulation bit for bit. On builds
+// without OpenMP (e.g. macOS) the pragmas are ignored and this stays serial.
 // ---------------------------------------------------------------------------
 // [[Rcpp::export]]
 double fullLikC(const NumericMatrix& tab, double mu, double sigma,
                 double minbralen, int model, bool useRec) {
   int n = (tab.nrow() + 1) / 2;
+  int nr = tab.nrow();
+#ifdef _OPENMP
+  // Parallel path: only when OpenMP is active, more than one thread is
+  // available, and the table is large enough to amortize buffer allocation
+  // and team startup. Each worker writes a disjoint, contiguous index range
+  // (schedule(static)); the serial row-order sum then reads every element
+  // once, reproducing the original accumulation bit for bit (verified
+  // identical to the serial path on the same inputs).
+  int maxthreads = omp_get_max_threads();
+  if (nr > 512 && maxthreads > 1) {
+    // P3: persistent shared buffer (function-static). The MCMC loop is serial
+    // outside these OpenMP regions, so only one fullLikC is ever active and
+    // no locking is needed; all nr entries are written before any is read,
+    // so stale contents are harmless. This avoids a fresh ~nr*8-byte
+    // allocation (and zero-fill) on each of the thousands of calls per run.
+    static std::vector<double> buf;
+    if ((int)buf.size() < nr) buf.resize(nr);
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < nr; ++i)
+      buf[i] = (i == n) ? 0.0 : termC(tab, i, mu, sigma, minbralen, model, useRec);
+    double s = 0.0;
+    for (int i = 0; i < nr; ++i) {
+      if (i == n) continue;
+      s += buf[i];
+    }
+    return s;
+  }
+#endif
+  // Serial path: direct accumulation, no buffer - bit-identical to the
+  // original likelihoodXC implementations in probs.cpp.
   double s = 0.0;
-  for (int i = 0; i < tab.nrow(); ++i) {
+  for (int i = 0; i < nr; ++i) {
     if (i == n) continue;
     s += termC(tab, i, mu, sigma, minbralen, model, useRec);
   }
@@ -193,6 +244,31 @@ double coalAlphaSumC(const NumericVector& leaves, const NumericVector& nodes) {
   std::sort(lv.begin(), lv.end(), std::greater<double>());
   std::sort(nd.begin(), nd.end(), std::greater<double>());
   int nl = (int)lv.size(), nn = (int)nd.size();
+  int i1 = 0, i2 = 0, k = 0;
+  double su = 0.0, prev = 0.0;
+  bool first = true;
+  while (i1 < nl || i2 < nn) {
+    double e; bool isLeaf;
+    if (i2 >= nn || (i1 < nl && lv[i1] >= nd[i2])) { e = lv[i1]; isLeaf = true; }
+    else { e = nd[i2]; isLeaf = false; }
+    if (!first) su += (double)k * (double)(k - 1) * (prev - e);
+    k += isLeaf ? 1 : -1;
+    prev = e;
+    first = false;
+    if (isLeaf) i1++; else i2++;
+  }
+  return su;
+}
+
+// Same statistic without the defensive copies and sorts: requires both
+// inputs to already be sorted in decreasing order (as maintained by
+// changeinorderedvec / the sort() calls in main.R). Sorting an already
+// sorted vector is an identity operation, so this is bit-identical to
+// coalAlphaSumC on such inputs. Used by the C++ MCMC loop's Gibbs move.
+double coalAlphaSumSortedC(const NumericVector& leaves, const NumericVector& nodes) {
+  const double* lv = leaves.begin();
+  const double* nd = nodes.begin();
+  int nl = (int)leaves.size(), nn = (int)nodes.size();
   int i1 = 0, i2 = 0, k = 0;
   double su = 0.0, prev = 0.0;
   bool first = true;

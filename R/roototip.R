@@ -34,11 +34,28 @@ roottotip = function(tree,date,rate=NA,permTest=10000,showFig=T,colored=T,showPr
   #pvalue=summary(res)$coefficients[,4][2]
   #print(c(r2,correl^2))#Equal
 
+  #Permutation test: sample() calls MUST stay in R (they consume R's RNG,
+  #and bactdate() runs roottotip after set.seed, so changing the RNG stream
+  #would break MCMC trajectory bit-exactness). But cor() can be inlined:
+  #precompute the y-side once, then each permutation only needs the x-side.
+  #pvalue is not used by bactdate (only $rate is), so any FP difference in
+  #pvalue is harmless.
   pvalue=0
-  for (i in 1:permTest) {
-    date2=sample(date,n,replace=F)
-    correl2=cor(date2,ys,use='complete.obs')
-    if (correl2>=correl) pvalue=pvalue+1/permTest
+  if (any(is.na(date))) {
+    for (i in 1:permTest) {
+      date2=sample(date,n,replace=F)
+      correl2=cor(date2,ys,use='complete.obs')
+      if (correl2>=correl) pvalue=pvalue+1/permTest
+    }
+  } else {
+    yc=ys-mean(ys)
+    ssy=sqrt(sum(yc*yc))
+    for (i in 1:permTest) {
+      date2=sample(date,n,replace=F)
+      dc=date2-mean(date2)
+      correl2=sum(dc*yc)/(sqrt(sum(dc*dc))*ssy)
+      if (correl2>=correl) pvalue=pvalue+1/permTest
+    }
   }
 
   if (rate<0) {warning('The linear regression suggests a negative rate.')}
@@ -143,18 +160,7 @@ initRoot = function(phy,date,mtry=10,useRec=F) {
 leafDates = function (phy) {
   rootdate=phy$root.time
   if (is.null(rootdate)) rootdate=0
-  nsam=length(phy$tip.label)
-  dates=rep(rootdate,nsam)
-  for (i in 1:nsam) {
-    w=i
-    while (1) {
-      r=which(phy$edge[,2]==w)
-      if (length(r)==0) break
-      dates[i]=dates[i]+phy$edge.length[r]
-      w=phy$edge[r,1]
-    }
-  }
-  return(dates)
+  leafDatesC(phy$edge, phy$edge.length, length(phy$tip.label), rootdate)
 }
 
 #' Compute dates of leaves and internal nodes for a given tree

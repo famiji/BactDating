@@ -1,0 +1,19 @@
+# Enable OpenMP where the R build supports it (Linux toolchains set
+# SHLIB_OPENMP_CXXFLAGS; on macOS these variables are empty and the pragmas
+# in the sources are silently ignored, keeping a serial bit-identical path).
+PKG_CXXFLAGS += $(SHLIB_OPENMP_CXXFLAGS)
+PKG_LIBS += $(SHLIB_OPENMP_LIBS)
+
+# Disable floating-point contraction (FMA). The bit-exact ("exact") mode caches
+# per-step prior increments inc[t] = w*(prev-ev) and later accumulates them with
+# p -= inc[t]. A cached product is necessarily rounded once when stored and
+# again when subtracted (two roundings), whereas a fused multiply-subtract
+# (p = p - (w*gap)) rounds only once. If the compiler contracts the reference
+# walk into FMAs but the cached path cannot fuse, the two diverge by 1 ulp and
+# bit-exactness breaks. Forcing -ffp-contract=off makes every multiply-subtract
+# in the library (reference AND optimized paths) use the same two-rounding
+# mul-then-sub sequence, so they stay bit-identical. It also removes a
+# portability hazard: FMA availability differs across CPUs, so with contraction
+# enabled the same seed could yield different trajectories on different
+# hardware. Both GCC and Clang accept this flag.
+PKG_CXXFLAGS += -ffp-contract=off

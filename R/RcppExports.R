@@ -29,6 +29,10 @@ mcmcLoopC <- function(tab, edge, n, nbIts, thin, orderedleafdates, orderednodeda
     .Call('_BactDating_mcmcLoopC', PACKAGE = 'BactDating', tab, edge, n, nbIts, thin, orderedleafdates, orderednodedates, misDates, rangedate, mu, sigma, alpha, l, p, sdMu, sdSigma, sdDates, updateMu, updateSigma, updateAlpha, updateRootAll, updateRootBranch, mixedModel, tuning, useCoalPrior, model, useRec, minbralen, mode, record)
 }
 
+leafDatesC <- function(edge, elen, ntip, rootdate) {
+    .Call('_BactDating_leafDatesC', PACKAGE = 'BactDating', edge, elen, ntip, rootdate)
+}
+
 coalpriorC <- function(leaves, nodes, alpha) {
     .Call('_BactDating_coalpriorC', PACKAGE = 'BactDating', leaves, nodes, alpha)
 }
